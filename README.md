@@ -65,11 +65,10 @@ Foi mantido como o coracao operacional da ferramenta:
 
 ## Estrutura do repositorio
 
-- `woopack/`: aplicacao principal em Laravel
-- `woopack/app/`: controllers, services, middleware e models
-- `woopack/resources/js/`: frontend React migrado
-- `woopack/database/`: migrations e banco local
-- `woopack/tests/`: testes automatizados da API
+- `app/`: controllers, services, middleware e models
+- `resources/js/`: frontend React migrado
+- `database/`: migrations e banco local
+- `tests/`: testes automatizados da API
 - `woopack_legacy/`: copia local do projeto antigo, mantida fora do commit
 
 ## Configuracao local
@@ -80,7 +79,7 @@ Dominio local configurado:
 
 - `http://indoor.woopack`
 
-Variaveis principais no arquivo `woopack/.env`:
+Variaveis principais no arquivo `.env`:
 
 ```env
 APP_URL=http://indoor.woopack
@@ -100,7 +99,7 @@ ADMIN_PASSWORD=sua_senha
 
 ## Como rodar
 
-Dentro da pasta `woopack/`:
+Na raiz do projeto:
 
 ```bash
 composer install
