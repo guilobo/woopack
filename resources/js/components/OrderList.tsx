@@ -65,16 +65,16 @@ export default function OrderList() {
               placeholder="Buscar por ID ou nome..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary transition-all w-72 text-sm shadow-sm"
+              className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-10 pr-4 text-sm shadow-sm transition-all focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/10 sm:w-72"
             />
           </div>
-          <div className="flex items-center gap-2 bg-white border border-slate-200 p-1 rounded-xl shadow-sm">
+          <div className="flex w-full items-center gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm sm:w-auto">
             {['processing', 'on-hold', 'completed', 'any'].map((status) => (
               <button
                 key={status}
                 onClick={() => setFilter(status)}
                 className={cn(
-                  'px-4 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all',
+                  'whitespace-nowrap px-4 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all',
                   filter === status
                     ? 'bg-primary text-white shadow-md shadow-primary/20'
                     : 'text-slate-500 hover:bg-slate-50',

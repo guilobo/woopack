@@ -100,16 +100,16 @@ export default function PackingMode() {
   const currentOrder = orders[currentIndex];
 
   return (
-    <div className="h-full flex flex-col space-y-8">
-      <div className="flex items-center justify-between bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+    <div className="h-full flex flex-col space-y-6 sm:space-y-8">
+      <div className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
         <button
           onClick={() => navigate('/orders')}
-          className="flex items-center gap-2 px-4 py-2 text-slate-500 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all font-medium text-sm"
+          className="flex items-center gap-2 self-start rounded-xl px-4 py-2 text-sm font-medium text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-900"
         >
           <ArrowLeft size={18} /> Sair do Modo
         </button>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center justify-between gap-4 sm:justify-center sm:gap-6">
           <button
             onClick={prevOrder}
             disabled={currentIndex === 0}
@@ -146,14 +146,14 @@ export default function PackingMode() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-8 overflow-hidden pb-4"
+          className="flex-1 grid grid-cols-1 gap-6 overflow-hidden pb-4 lg:grid-cols-3 lg:gap-8"
         >
-          <div className="lg:col-span-2 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
-            <div className="card-modern p-10">
-              <div className="flex justify-between items-start mb-10">
+          <div className="space-y-6 overflow-y-auto custom-scrollbar lg:col-span-2 lg:pr-2">
+            <div className="card-modern p-6 sm:p-8 lg:p-10">
+              <div className="mb-8 flex flex-col gap-6 sm:mb-10 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <div className="text-primary font-bold text-sm mb-1">PEDIDO</div>
-                  <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight">#{currentOrder.id}</h2>
+                  <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">#{currentOrder.id}</h2>
                   <p className="text-slate-400 text-sm mt-2 font-medium">
                     {new Date(currentOrder.date_created).toLocaleString('pt-BR')}
                   </p>
@@ -172,8 +172,8 @@ export default function PackingMode() {
                 </div>
                 <div className="grid gap-4">
                   {currentOrder.line_items.map((item: any) => (
-                    <div key={item.id} className="flex justify-between items-center p-5 bg-slate-50/50 rounded-2xl border border-slate-100 group hover:border-primary/20 transition-all">
-                      <div className="flex items-center gap-5">
+                    <div key={item.id} className="flex flex-col gap-4 rounded-2xl border border-slate-100 bg-slate-50/50 p-4 transition-all hover:border-primary/20 sm:flex-row sm:items-center sm:justify-between sm:p-5 group">
+                      <div className="flex items-center gap-4 sm:gap-5">
                         <div className="relative">
                           <div className="w-16 h-16 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex items-center justify-center">
                             {item.image?.src ? (
@@ -196,7 +196,7 @@ export default function PackingMode() {
                           <div className="text-xs text-slate-400 font-medium mt-0.5">SKU: {item.sku || 'N/A'}</div>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right sm:min-w-[96px]">
                         <div className="font-bold text-slate-900">R$ {parseFloat(item.total).toFixed(2)}</div>
                       </div>
                     </div>
@@ -207,7 +207,7 @@ export default function PackingMode() {
           </div>
 
           <div className="space-y-6 flex flex-col">
-            <div className="card-modern p-8">
+            <div className="card-modern p-6 sm:p-8">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">Endereco de Entrega</h3>
               <div className="text-slate-700 space-y-2">
                 <p className="font-bold text-slate-900 text-lg mb-4">{currentOrder.shipping?.first_name} {currentOrder.shipping?.last_name}</p>
@@ -220,7 +220,7 @@ export default function PackingMode() {
               </div>
             </div>
 
-            <div className="card-modern p-8 flex-1">
+            <div className="card-modern flex-1 p-6 sm:p-8">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Notas do Cliente</h3>
               <div className="p-4 bg-amber-50 rounded-xl border border-amber-100 text-amber-800 text-sm italic leading-relaxed">
                 {currentOrder.customer_note || 'Nenhuma observacao especial para este pedido.'}
@@ -229,7 +229,7 @@ export default function PackingMode() {
 
             <button
               onClick={() => togglePacked(currentOrder.id)}
-              className="w-full p-8 bg-primary text-white rounded-3xl shadow-xl shadow-primary/20 hover:shadow-2xl hover:shadow-primary/30 hover:-translate-y-1 transition-all flex flex-col items-center justify-center gap-4 group"
+              className="flex w-full flex-col items-center justify-center gap-4 rounded-3xl bg-primary p-6 text-white shadow-xl shadow-primary/20 transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/30 sm:p-8 group"
             >
               <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
                 <CheckSquare size={32} />

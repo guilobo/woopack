@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { Menu, Package } from 'lucide-react';
 import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import api from './api';
 import Login from './components/Login';
@@ -15,6 +16,7 @@ import { routerBasename } from './config';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -50,17 +52,45 @@ export default function App() {
           </Routes>
         ) : (
           <div className="flex h-screen overflow-hidden">
-            <Sidebar onLogout={() => setIsAuthenticated(false)} />
-            <main className="flex-1 overflow-y-auto">
-              <div className="max-w-7xl mx-auto p-8">
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/orders" element={<OrderList />} />
-                  <Route path="/packing/:orderId?" element={<PackingMode />} />
-                  <Route path="*" element={<Navigate to="/" />} />
-                </Routes>
-              </div>
-            </main>
+            <Sidebar
+              isOpen={sidebarOpen}
+              onClose={() => setSidebarOpen(false)}
+              onLogout={() => setIsAuthenticated(false)}
+            />
+
+            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+              <header className="flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
+                <button
+                  type="button"
+                  onClick={() => setSidebarOpen(true)}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+                  aria-label="Abrir menu"
+                >
+                  <Menu size={20} />
+                </button>
+
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20">
+                    <Package size={20} />
+                  </div>
+                  <div className="text-right">
+                    <div className="text-base font-bold tracking-tight text-slate-900">WooPack</div>
+                    <div className="text-[10px] font-medium uppercase tracking-[0.28em] text-slate-400">Logistica</div>
+                  </div>
+                </div>
+              </header>
+
+              <main className="flex-1 overflow-y-auto">
+                <div className="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/orders" element={<OrderList />} />
+                    <Route path="/packing/:orderId?" element={<PackingMode />} />
+                    <Route path="*" element={<Navigate to="/" />} />
+                  </Routes>
+                </div>
+              </main>
+            </div>
           </div>
         )}
       </div>
