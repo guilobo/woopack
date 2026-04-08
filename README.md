@@ -117,6 +117,42 @@ php artisan migrate --force
 
 Depois disso, acesse `http://indoor.woopack`.
 
+## Deploy DreamHost
+
+O projeto inclui uma automacao local para deploy em DreamHost baseada em Git.
+
+Arquivos envolvidos:
+
+- `.serverconfig`: credenciais e caminhos do servidor
+- `.serverconfig.example`: modelo sem segredos
+- `scripts/deploy-dreamhost.ps1`: script de deploy
+
+Configuracao opcional:
+
+- `deploy_php_bin`: caminho do binario PHP usado nos comandos `artisan` em producao
+
+Fluxo do deploy:
+
+1. executa testes locais;
+2. gera o build de producao local;
+3. gera um `git bundle` com a branch publicada;
+4. envia esse bundle para um repositorio bare no servidor;
+5. faz checkout remoto da aplicacao;
+6. envia `vendor/`, `public/build/` e o `.env` de producao;
+7. sincroniza `public/` com o webroot do dominio;
+8. roda migrations e caches do Laravel em producao.
+
+Para publicar:
+
+```powershell
+pwsh -File .\scripts\deploy-dreamhost.ps1
+```
+
+O `.env` remoto e montado automaticamente usando:
+
+- credenciais do MySQL da `.serverconfig`;
+- `WOOCOMMERCE_URL`, `WOOCOMMERCE_KEY`, `WOOCOMMERCE_SECRET` e `ADMIN_PASSWORD` do `.env` local.
+
 ## Endpoints mantidos da versao anterior
 
 - `POST /api/login`
