@@ -119,6 +119,20 @@ it('requires authentication on protected routes', function (): void {
         ->assertJson(['error' => 'Unauthorized']);
 });
 
+it('serves public legal pages for the meta app setup', function (): void {
+    $this->get('/politica-de-privacidade')
+        ->assertOk()
+        ->assertSee('Politica de Privacidade');
+
+    $this->get('/termos-de-servico')
+        ->assertOk()
+        ->assertSee('Termos de Servico');
+
+    $this->get('/exclusao-de-dados')
+        ->assertOk()
+        ->assertSee('Exclusao de Dados do Usuario');
+});
+
 it('returns auth payload for the active user', function (): void {
     $user = User::factory()->admin()->create();
     woocommerceConnection($user);
