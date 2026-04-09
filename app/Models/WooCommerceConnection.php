@@ -5,17 +5,22 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class PackingStatus extends Model
+class WooCommerceConnection extends Model
 {
     protected $fillable = [
         'user_id',
-        'woo_order_id',
-        'packed_at',
+        'store_url',
+        'consumer_key',
+        'consumer_secret',
     ];
 
-    protected $casts = [
-        'packed_at' => 'datetime',
-    ];
+    protected function casts(): array
+    {
+        return [
+            'consumer_key' => 'encrypted',
+            'consumer_secret' => 'encrypted',
+        ];
+    }
 
     public function user(): BelongsTo
     {

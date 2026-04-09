@@ -300,12 +300,6 @@ $remoteAppParent = ($remoteAppPath -replace '/[^/]+$','')
 $remoteTempPath = "/home/$script:ServerUser/tmp/$appName-deploy"
 $remotePhpBin = Get-ConfigValue -Values $config.deploy -Key 'deploy_php_bin' -Default '/usr/local/bin/php-8.4'
 
-foreach ($requiredKey in @('WOOCOMMERCE_URL', 'WOOCOMMERCE_KEY', 'WOOCOMMERCE_SECRET', 'ADMIN_PASSWORD')) {
-    if (-not $localEnv.Contains($requiredKey) -or [string]::IsNullOrWhiteSpace([string]$localEnv[$requiredKey])) {
-        throw "O .env local precisa conter $requiredKey."
-    }
-}
-
 if (-not (Test-Path -LiteralPath (Join-Path $repoRoot 'artisan'))) {
     throw 'O script precisa ser executado na raiz de uma aplicacao Laravel.'
 }
@@ -384,10 +378,6 @@ $remoteEnvValues['DB_PORT'] = '3306'
 $remoteEnvValues['DB_DATABASE'] = [string]$config.mysql['dbname']
 $remoteEnvValues['DB_USERNAME'] = [string]$config.mysql['user']
 $remoteEnvValues['DB_PASSWORD'] = [string]$config.mysql['senha']
-$remoteEnvValues['WOOCOMMERCE_URL'] = $localEnv['WOOCOMMERCE_URL']
-$remoteEnvValues['WOOCOMMERCE_KEY'] = $localEnv['WOOCOMMERCE_KEY']
-$remoteEnvValues['WOOCOMMERCE_SECRET'] = $localEnv['WOOCOMMERCE_SECRET']
-$remoteEnvValues['ADMIN_PASSWORD'] = $localEnv['ADMIN_PASSWORD']
 
 Write-DotEnvFile -Values $remoteEnvValues -Path $remoteEnvFile
 

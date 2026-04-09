@@ -2,29 +2,58 @@
 
 namespace App\Services;
 
+use App\Models\User;
+use App\Models\WooCommerceConnection;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 class WooCommerceService
 {
-    public function getOrders(array $filters = []): array
+    public function getOrders(User $user, array $filters = []): array
     {
-        return $this->request('orders', $filters, 15);
+        return $this->request($this->resolveConnection($user), 'orders', $filters, 15);
     }
 
-    public function getOrder(int|string $orderId): array
+    public function getOrder(User $user, int|string $orderId): array
     {
-        return $this->request("orders/{$orderId}", [], 10);
+        return $this->request($this->resolveConnection($user), "orders/{$orderId}", [], 10);
     }
 
-    protected function request(string $endpoint, array $params, int $timeout): array
+    public function testConnection(User $user, array $overrides = []): array
     {
-        $baseUrl = $this->getBaseUrl();
-        [$key, $secret] = $this->getCredentials();
+        $connection = $this->resolveConnection($user);
 
+        $storeUrl = $overrides['store_url'] ?? $connection->store_url;
+        $consumerKey = $overrides['consumer_key'] ?? $connection->consumer_key;
+        $consumerSecret = $overrides['consumer_secret'] ?? $connection->consumer_secret;
+
+        if (! filled($storeUrl) || ! filled($consumerKey) || ! filled($consumerSecret)) {
+            throw new WooCommerceException('WooCommerce connection not configured', 400);
+        }
+
+        $temporaryConnection = new WooCommerceConnection([
+            'store_url' => $storeUrl,
+            'consumer_key' => $consumerKey,
+            'consumer_secret' => $consumerSecret,
+        ]);
+
+        $this->request($temporaryConnection, 'orders', [
+            'page' => 1,
+            'per_page' => 1,
+        ], 10);
+
+        return [
+            'success' => true,
+            'message' => 'Conexao WooCommerce validada com sucesso.',
+        ];
+    }
+
+    protected function request(WooCommerceConnection $connection, string $endpoint, array $params, int $timeout): array
+    {
+        $baseUrl = $this->normalizeBaseUrl($connection->store_url);
         $query = array_filter([
-            'consumer_key' => $key,
-            'consumer_secret' => $secret,
+            'consumer_key' => $connection->consumer_key,
+            'consumer_secret' => $connection->consumer_secret,
             ...$params,
         ], fn ($value) => $value !== null && $value !== '');
 
@@ -52,12 +81,23 @@ class WooCommerceService
         return $payload;
     }
 
-    protected function getBaseUrl(): string
+    private function resolveConnection(User $user): WooCommerceConnection
     {
-        $url = trim((string) config('woopack.woocommerce.url'));
+        $connection = $user->wooCommerceConnection()->first();
+
+        if (! $connection) {
+            throw new WooCommerceException('WooCommerce connection not configured', 400);
+        }
+
+        return $connection;
+    }
+
+    private function normalizeBaseUrl(string $url): string
+    {
+        $url = trim($url);
 
         if ($url === '') {
-            throw new WooCommerceException('WooCommerce URL not configured', 400);
+            throw new WooCommerceException('WooCommerce connection not configured', 400);
         }
 
         $url = rtrim($url, '/');
@@ -67,17 +107,5 @@ class WooCommerceService
         }
 
         return $url;
-    }
-
-    protected function getCredentials(): array
-    {
-        $key = trim((string) config('woopack.woocommerce.key'));
-        $secret = trim((string) config('woopack.woocommerce.secret'));
-
-        if ($key === '' || $secret === '') {
-            throw new WooCommerceException('WooCommerce credentials not configured', 400);
-        }
-
-        return [$key, $secret];
     }
 }

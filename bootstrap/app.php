@@ -13,6 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'woopack.auth' => \App\Http\Middleware\EnsureWoopackAuthenticated::class,
+            'woopack.admin' => \App\Http\Middleware\EnsureAdmin::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [

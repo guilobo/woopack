@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, ListOrdered, Package, LogOut, X } from 'lucide-react';
+import { LayoutDashboard, ListOrdered, Package, LogOut, Settings, X } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import api from '../api';
@@ -9,12 +9,14 @@ function cn(...inputs: ClassValue[]) {
 }
 
 interface SidebarProps {
+  isAdmin: boolean;
   isOpen: boolean;
+  userName: string;
   onClose: () => void;
   onLogout: () => void;
 }
 
-export default function Sidebar({ isOpen, onClose, onLogout }: SidebarProps) {
+export default function Sidebar({ isAdmin, isOpen, userName, onClose, onLogout }: SidebarProps) {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -32,6 +34,7 @@ export default function Sidebar({ isOpen, onClose, onLogout }: SidebarProps) {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
     { icon: ListOrdered, label: 'Pedidos', path: '/orders' },
     { icon: Package, label: 'Modo Embalagem', path: '/packing' },
+    { icon: Settings, label: isAdmin ? 'Integracao e Convites' : 'Integracao', path: '/settings/integration' },
   ];
 
   return (
@@ -97,7 +100,12 @@ export default function Sidebar({ isOpen, onClose, onLogout }: SidebarProps) {
         ))}
       </nav>
 
-      <div className="p-6 border-t border-slate-100">
+      <div className="border-t border-slate-100 p-6">
+        <div className="mb-4 rounded-2xl bg-slate-50 px-4 py-3">
+          <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Conta ativa</div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">{userName}</div>
+          <div className="text-xs text-slate-500">{isAdmin ? 'Administrador' : 'Operador'}</div>
+        </div>
         <button
           onClick={handleLogout}
           className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-slate-500 hover:bg-red-50 hover:text-red-600 transition-all group"

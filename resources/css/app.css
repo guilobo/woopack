@@ -46,3 +46,6 @@
   @apply w-full px-4 py-2 bg-white border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all;
 }
 
+.input-modern-icon {
+  @apply pl-11;
+}

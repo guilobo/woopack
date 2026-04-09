@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\PackingStatus;
+use App\Models\User;
 use App\Services\WooCommerceException;
 use App\Services\WooCommerceService;
 use Illuminate\Http\JsonResponse;
@@ -18,6 +19,9 @@ class OrderController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+
         $validated = $request->validate([
             'status' => ['nullable', 'string'],
             'page' => ['nullable', 'integer', 'min:1'],
@@ -25,24 +29,27 @@ class OrderController extends Controller
         ]);
 
         try {
-            $orders = $this->wooCommerce->getOrders([
+            $orders = $this->wooCommerce->getOrders($user, [
                 'status' => ($validated['status'] ?? null) === 'any' ? null : ($validated['status'] ?? null),
                 'page' => $validated['page'] ?? 1,
                 'per_page' => $validated['per_page'] ?? 10,
             ]);
 
-            return response()->json($this->annotateOrders($orders)->values()->all());
+            return response()->json($this->annotateOrders($user, $orders)->values()->all());
         } catch (WooCommerceException $exception) {
             return response()->json(['error' => $exception->getMessage()], $exception->status());
         }
     }
 
-    public function show(int $id): JsonResponse
+    public function show(Request $request, int $id): JsonResponse
     {
-        try {
-            $order = $this->wooCommerce->getOrder($id);
+        /** @var User $user */
+        $user = $request->user();
 
-            return response()->json($this->annotateOrder($order));
+        try {
+            $order = $this->wooCommerce->getOrder($user, $id);
+
+            return response()->json($this->annotateOrder($user, $order));
         } catch (WooCommerceException $exception) {
             return response()->json(['error' => $exception->getMessage()], $exception->status());
         }
@@ -50,26 +57,32 @@ class OrderController extends Controller
 
     public function pack(Request $request, int $id): JsonResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+
         $validated = $request->validate([
             'packed' => ['required', 'boolean'],
         ]);
 
         if ($validated['packed']) {
-            PackingStatus::query()->updateOrCreate(
+            $user->packingStatuses()->updateOrCreate(
                 ['woo_order_id' => $id],
                 ['packed_at' => now()]
             );
         } else {
-            PackingStatus::query()->where('woo_order_id', $id)->delete();
+            $user->packingStatuses()->where('woo_order_id', $id)->delete();
         }
 
         return response()->json(['success' => true]);
     }
 
-    public function stats(): JsonResponse
+    public function stats(Request $request): JsonResponse
     {
+        /** @var User $user */
+        $user = $request->user();
+
         try {
-            $orders = collect($this->wooCommerce->getOrders([
+            $orders = collect($this->wooCommerce->getOrders($user, [
                 'per_page' => 50,
             ]));
 
@@ -95,9 +108,9 @@ class OrderController extends Controller
         }
     }
 
-    private function annotateOrders(array $orders): Collection
+    private function annotateOrders(User $user, array $orders): Collection
     {
-        $packedIds = PackingStatus::query()
+        $packedIds = $user->packingStatuses()
             ->whereIn('woo_order_id', collect($orders)->pluck('id')->filter()->all())
             ->pluck('woo_order_id')
             ->flip();
@@ -109,9 +122,9 @@ class OrderController extends Controller
         });
     }
 
-    private function annotateOrder(array $order): array
+    private function annotateOrder(User $user, array $order): array
     {
-        $order['is_packed'] = PackingStatus::query()
+        $order['is_packed'] = $user->packingStatuses()
             ->where('woo_order_id', $order['id'] ?? 0)
             ->exists();
 

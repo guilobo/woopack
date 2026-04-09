@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Lock } from 'lucide-react';
+import { Lock, Mail } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api';
+import type { AuthState } from '../App';
 
 interface LoginProps {
-  onLogin: () => void;
+  onLogin: (payload: Partial<AuthState>) => void;
 }
 
 export default function Login({ onLogin }: LoginProps) {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,10 +22,11 @@ export default function Login({ onLogin }: LoginProps) {
     setError('');
 
     try {
-      await api.post('/login', { password });
-      onLogin();
+      const response = await api.post('/login', { email, password });
+      onLogin(response.data);
+      navigate(response.data.has_integration ? '/' : '/settings/integration');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Senha incorreta. Tente novamente.');
+      setError(err.response?.data?.error || 'Nao foi possivel entrar. Confira seus dados.');
     } finally {
       setLoading(false);
     }
@@ -44,7 +49,22 @@ export default function Login({ onLogin }: LoginProps) {
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">Senha de Acesso</label>
+            <label className="text-sm font-medium text-slate-700">E-mail</label>
+            <div className="relative">
+              <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="voce@empresa.com"
+                className="input-modern input-modern-icon"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Senha</label>
             <input
               type="password"
               value={password}
@@ -76,7 +96,7 @@ export default function Login({ onLogin }: LoginProps) {
 
         <div className="mt-10 text-center">
           <p className="text-slate-400 text-xs">
-            Sistema de Gestao de Pedidos v2.0
+            Acesso liberado apenas por convite
           </p>
         </div>
       </motion.div>

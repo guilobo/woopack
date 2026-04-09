@@ -2,13 +2,16 @@
 
 WooPack e uma ferramenta interna de operacao logistica para lojas WooCommerce. Ela centraliza a consulta de pedidos, mostra indicadores da operacao em tempo real e oferece um modo de embalagem pensado para acelerar a separacao e a conferencia dos itens antes do envio.
 
-Esta versao foi migrada de um backend em `Node/Express` para `Laravel 13 + MySQL`, preservando o frontend React e a experiencia visual do sistema original.
+Esta versao roda em `Laravel 13 + MySQL`, preserva o frontend React do projeto original e agora funciona em modo multiusuario: cada conta tem a propria conexao WooCommerce e o proprio status local de embalagem.
 
 ## O que a ferramenta faz
 
 O WooPack foi construido para apoiar a rotina de expedicao de pedidos. Na pratica, ele permite:
 
 - autenticar o acesso ao sistema com uma senha interna simples;
+- autenticar usuarios reais com sessao Laravel;
+- cadastrar novos usuarios por convite;
+- configurar uma conexao WooCommerce por conta;
 - consultar pedidos do WooCommerce em tempo real;
 - visualizar metricas operacionais no dashboard;
 - filtrar pedidos por status;
@@ -19,11 +22,12 @@ O WooPack foi construido para apoiar a rotina de expedicao de pedidos. Na pratic
 
 ## Fluxo de uso
 
-1. O operador entra no sistema com a senha configurada no `.env`.
-2. O dashboard mostra volume de pedidos, vendas e distribuicao por status.
-3. A tela de pedidos permite localizar rapidamente o pedido certo.
-4. O modo embalagem organiza os pedidos pendentes em fila.
-5. Ao finalizar a conferencia, o pedido e marcado como embalado no banco local.
+1. Um administrador inicial cria ou atualiza a conta admin via comando Artisan.
+2. O admin gera convites para novos usuarios.
+3. O convidado aceita o convite, cria a propria senha e entra no sistema.
+4. Cada usuario configura a propria loja WooCommerce.
+5. O dashboard mostra volume de pedidos, vendas e distribuicao por status daquela conta.
+6. O modo embalagem registra o status local apenas para o usuario logado.
 
 ## Arquitetura atual
 
@@ -31,8 +35,8 @@ O WooPack foi construido para apoiar a rotina de expedicao de pedidos. Na pratic
 - Frontend: React + Vite
 - Banco local: MySQL do XAMPP
 - Origem dos pedidos: API do WooCommerce
-- Persistencia local: tabela `packing_statuses`
-- Autenticacao: sessao Laravel com senha unica
+- Persistencia local: `packing_statuses`, `woo_commerce_connections` e `invitations`
+- Autenticacao: usuarios reais com sessao Laravel
 
 ## Principais funcionalidades
 
@@ -68,7 +72,7 @@ Foi mantido como o coracao operacional da ferramenta:
 - `app/`: controllers, services, middleware e models
 - `resources/js/`: frontend React migrado
 - `database/`: migrations e banco local
-- `tests/`: testes automatizados da API
+- `tests/`: testes principais em Pest
 - `woopack_legacy/`: copia local do projeto antigo, mantida fora do commit
 
 ## Configuracao local
@@ -90,12 +94,9 @@ DB_PORT=3306
 DB_DATABASE=woopack
 DB_USERNAME=root
 DB_PASSWORD=
-
-WOOCOMMERCE_URL=https://sua-loja.com
-WOOCOMMERCE_KEY=ck_...
-WOOCOMMERCE_SECRET=cs_...
-ADMIN_PASSWORD=sua_senha
 ```
+
+As credenciais do WooCommerce nao ficam mais no `.env`: cada usuario salva sua propria conexao dentro do sistema.
 
 ## Como rodar
 
@@ -105,6 +106,7 @@ Na raiz do projeto:
 composer install
 npm install
 php artisan migrate --force
+php artisan woopack:create-admin "Admin WooPack" admin@example.com secret-pass
 npm run dev
 ```
 
@@ -151,13 +153,25 @@ pwsh -File .\scripts\deploy-dreamhost.ps1
 O `.env` remoto e montado automaticamente usando:
 
 - credenciais do MySQL da `.serverconfig`;
-- `WOOCOMMERCE_URL`, `WOOCOMMERCE_KEY`, `WOOCOMMERCE_SECRET` e `ADMIN_PASSWORD` do `.env` local.
+- as demais configuracoes gerais do `.env` local.
 
-## Endpoints mantidos da versao anterior
+Depois do primeiro deploy, crie o admin inicial no servidor:
+
+```bash
+php artisan woopack:create-admin "Admin WooPack" admin@example.com secret-pass
+```
+
+## Endpoints principais
 
 - `POST /api/login`
 - `POST /api/logout`
 - `GET /api/auth/check`
+- `GET /api/me`
+- `GET /api/integration`
+- `PUT /api/integration`
+- `POST /api/invitations`
+- `GET /api/invitations/{token}`
+- `POST /api/invitations/accept`
 - `GET /api/orders`
 - `GET /api/orders/{id}`
 - `POST /api/orders/{id}/pack`
@@ -175,4 +189,4 @@ npm run build
 
 ## Resumo
 
-O WooPack agora tem a mesma proposta operacional do sistema anterior, mas com uma base mais organizada para evolucao: Laravel no backend, MySQL para persistencia local, React preservado no frontend e integracao direta com WooCommerce para manter os dados sempre atualizados.
+O WooPack agora preserva a proposta operacional do sistema anterior, mas com uma base mais robusta para crescer: contas reais no Laravel, conexao WooCommerce por usuario, status de embalagem isolado por conta, convites para cadastro e testes principais em Pest antes de cada entrega.

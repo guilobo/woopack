@@ -4,13 +4,15 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'password', 'is_admin'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -26,7 +28,23 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'is_admin' => 'boolean',
             'password' => 'hashed',
         ];
+    }
+
+    public function wooCommerceConnection(): HasOne
+    {
+        return $this->hasOne(WooCommerceConnection::class);
+    }
+
+    public function packingStatuses(): HasMany
+    {
+        return $this->hasMany(PackingStatus::class);
+    }
+
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(Invitation::class, 'created_by');
     }
 }
