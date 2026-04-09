@@ -9,6 +9,7 @@ use App\Services\WooCommerceException;
 use App\Services\WooCommerceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 class OrderController extends Controller
@@ -29,10 +30,16 @@ class OrderController extends Controller
         ]);
 
         try {
+            $status = ($validated['status'] ?? null) === 'any' ? null : ($validated['status'] ?? null);
+            $dateFilters = $status === 'processing'
+                ? []
+                : $this->buildDateFilters('30d');
+
             $orders = $this->wooCommerce->getOrders($user, [
-                'status' => ($validated['status'] ?? null) === 'any' ? null : ($validated['status'] ?? null),
+                'status' => $status,
                 'page' => $validated['page'] ?? 1,
                 'per_page' => $validated['per_page'] ?? 10,
+                ...$dateFilters,
             ]);
 
             return response()->json($this->annotateOrders($user, $orders)->values()->all());
@@ -81,12 +88,16 @@ class OrderController extends Controller
         /** @var User $user */
         $user = $request->user();
 
+        $validated = $request->validate([
+            'range' => ['nullable', 'in:today,7d,30d,month,90d'],
+        ]);
+
         try {
-            $orders = collect($this->wooCommerce->getOrders($user, [
-                'per_page' => 50,
-            ]));
+            $range = $validated['range'] ?? '30d';
+            $orders = collect($this->wooCommerce->getAllOrders($user, $this->buildDateFilters($range)));
 
             return response()->json([
+                'range' => $range,
                 'total_orders' => $orders->count(),
                 'total_sales' => $orders->sum(fn (array $order) => (float) ($order['total'] ?? 0)),
                 'status_counts' => $orders
@@ -106,6 +117,25 @@ class OrderController extends Controller
         } catch (WooCommerceException $exception) {
             return response()->json(['error' => $exception->getMessage()], $exception->status());
         }
+    }
+
+    private function buildDateFilters(string $range): array
+    {
+        $now = Carbon::now(config('app.timezone'));
+
+        $after = match ($range) {
+            'today' => $now->copy()->startOfDay(),
+            '7d' => $now->copy()->subDays(7),
+            '30d' => $now->copy()->subDays(30),
+            '90d' => $now->copy()->subDays(90),
+            'month' => $now->copy()->startOfMonth(),
+            default => $now->copy()->subDays(30),
+        };
+
+        return [
+            'after' => $after->toIso8601String(),
+            'before' => $now->toIso8601String(),
+        ];
     }
 
     private function annotateOrders(User $user, array $orders): Collection

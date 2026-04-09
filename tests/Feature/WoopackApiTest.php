@@ -5,12 +5,15 @@ use App\Models\PackingStatus;
 use App\Models\User;
 use App\Models\WooCommerceConnection;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function (): void {
     config([
         'app.url' => 'http://localhost',
     ]);
+
+    Carbon::setTestNow('2026-04-08 15:30:00');
 });
 
 function woocommerceConnection(User $user, array $attributes = []): WooCommerceConnection
@@ -61,6 +64,10 @@ function makeOrder(int $id, string $status, float $total, string $dateCreated = 
         ],
     ];
 }
+
+afterEach(function (): void {
+    Carbon::setTestNow();
+});
 
 it('logs in with a valid invited user account', function (): void {
     $user = User::factory()->create([
@@ -264,6 +271,50 @@ it('uses the authenticated users woocommerce connection and merges user scoped p
     });
 });
 
+it('limits non processing order tabs to the last 30 days', function (): void {
+    $user = User::factory()->create();
+    woocommerceConnection($user);
+
+    Http::fake([
+        'https://store.test/wp-json/wc/v3/orders*' => Http::response([]),
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/orders?status=completed')
+        ->assertOk();
+
+    Http::assertSent(function ($request): bool {
+        $url = $request->url();
+
+        return str_starts_with($url, 'https://store.test/wp-json/wc/v3/orders')
+            && str_contains($url, 'status=completed')
+            && str_contains($url, 'after=')
+            && str_contains($url, 'before=');
+    });
+});
+
+it('keeps processing orders without any date filter', function (): void {
+    $user = User::factory()->create();
+    woocommerceConnection($user);
+
+    Http::fake([
+        'https://store.test/wp-json/wc/v3/orders*' => Http::response([]),
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/orders?status=processing')
+        ->assertOk();
+
+    Http::assertSent(function ($request): bool {
+        $url = $request->url();
+
+        return str_starts_with($url, 'https://store.test/wp-json/wc/v3/orders')
+            && str_contains($url, 'status=processing')
+            && ! str_contains($url, 'after=')
+            && ! str_contains($url, 'before=');
+    });
+});
+
 it('returns a single order with the users own packing flag', function (): void {
     $user = User::factory()->create();
     $otherUser = User::factory()->create();
@@ -349,6 +400,79 @@ it('aggregates stats from the authenticated users woocommerce store', function (
         ->assertJsonPath('status_counts.completed', 1)
         ->assertJsonPath('daily_sales.2026-04-07', 150)
         ->assertJsonPath('daily_sales.2026-04-08', 25);
+});
+
+it('filters dashboard stats by the selected date range', function (): void {
+    $user = User::factory()->create();
+    woocommerceConnection($user);
+
+    Http::fake([
+        'https://store.test/wp-json/wc/v3/orders*' => Http::response([
+            makeOrder(1, 'processing', 100.00, '2026-04-08T10:00:00'),
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/stats?range=today')
+        ->assertOk()
+        ->assertJsonPath('range', 'today')
+        ->assertJsonPath('total_orders', 1);
+
+    Http::assertSent(function ($request): bool {
+        $url = $request->url();
+
+        return str_starts_with($url, 'https://store.test/wp-json/wc/v3/orders')
+            && str_contains($url, 'after=')
+            && str_contains($url, 'before=');
+    });
+});
+
+it('keeps a real date window when building dashboard filters', function (): void {
+    $user = User::factory()->create();
+    woocommerceConnection($user);
+
+    Http::fake([
+        'https://store.test/wp-json/wc/v3/orders*' => Http::response([]),
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/stats?range=30d')
+        ->assertOk();
+
+    Http::assertSent(function ($request): bool {
+        parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
+
+        return is_string($query['after'] ?? null)
+            && is_string($query['before'] ?? null)
+            && str_starts_with($query['after'], '2026-03-09T15:30:00')
+            && str_starts_with($query['before'], '2026-04-08T15:30:00')
+            && ($query['after'] !== $query['before']);
+    });
+});
+
+it('paginates through all woo orders when building dashboard stats', function (): void {
+    $user = User::factory()->create();
+    woocommerceConnection($user);
+
+    Http::fake([
+        'https://store.test/wp-json/wc/v3/orders*' => Http::sequence()
+            ->push(array_map(
+                fn (int $id) => makeOrder($id, 'processing', 10.00),
+                range(1, 100)
+            ))
+            ->push([
+                makeOrder(101, 'completed', 25.00),
+            ]),
+    ]);
+
+    $this->actingAs($user)
+        ->getJson('/api/stats?range=30d')
+        ->assertOk()
+        ->assertJsonPath('total_orders', 101)
+        ->assertJsonPath('status_counts.processing', 100)
+        ->assertJsonPath('status_counts.completed', 1);
+
+    Http::assertSentCount(2);
 });
 
 it('creates invitations only for administrators', function (): void {

@@ -24,15 +24,18 @@ function cn(...inputs: ClassValue[]) {
 export default function Dashboard() {
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<'today' | '7d' | '30d' | 'month' | '90d'>('30d');
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchStats();
-  }, []);
+    fetchStats(range);
+  }, [range]);
 
-  const fetchStats = async () => {
+  const fetchStats = async (selectedRange: 'today' | '7d' | '30d' | 'month' | '90d') => {
+    setLoading(true);
+
     try {
-      const res = await api.get('/stats');
+      const res = await api.get('/stats', { params: { range: selectedRange } });
       setStats(res.data);
     } catch {
       console.error('Failed to fetch stats');
@@ -51,6 +54,14 @@ export default function Dashboard() {
 
   const statusData = Object.entries(stats.status_counts).map(([name, value]) => ({ name, value }));
   const salesData = Object.entries(stats.daily_sales).map(([date, amount]) => ({ date, amount })).sort((a, b) => a.date.localeCompare(b.date));
+  const rangeOptions = [
+    { value: 'today', label: 'Hoje' },
+    { value: '7d', label: 'Ultimos 7 dias' },
+    { value: '30d', label: 'Ultimos 30 dias' },
+    { value: 'month', label: 'Este mes' },
+    { value: '90d', label: 'Ultimos 90 dias' },
+  ] as const;
+  const activeRangeLabel = rangeOptions.find((option) => option.value === range)?.label ?? 'Ultimos 30 dias';
 
   const cards = [
     { label: 'Vendas Totais', value: `R$ ${stats.total_sales.toLocaleString()}`, icon: TrendingUp, color: 'bg-blue-50 text-blue-600' },
@@ -61,9 +72,32 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-10">
-      <header>
-        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
-        <p className="text-slate-500 mt-1">Visao geral da operacao logistica</p>
+      <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Dashboard</h1>
+          <p className="mt-1 text-slate-500">Visao geral da operacao logistica</p>
+          <div className="mt-3 inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold uppercase tracking-widest text-slate-500">
+            Periodo ativo: {activeRangeLabel}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+          {rangeOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setRange(option.value)}
+              className={cn(
+                'rounded-xl px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-all',
+                range === option.value
+                  ? 'bg-primary text-white shadow-md shadow-primary/20'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -96,7 +130,7 @@ export default function Dashboard() {
         <div className="card-modern p-8">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-lg font-bold text-slate-900">Fluxo de Vendas</h2>
-            <div className="px-3 py-1 bg-slate-50 text-slate-500 text-xs font-medium rounded-full border border-slate-100">Ultimos Pedidos</div>
+            <div className="px-3 py-1 bg-slate-50 text-slate-500 text-xs font-medium rounded-full border border-slate-100">{activeRangeLabel}</div>
           </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -120,7 +154,7 @@ export default function Dashboard() {
         <div className="card-modern p-8">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-lg font-bold text-slate-900">Status dos Pedidos</h2>
-            <div className="px-3 py-1 bg-slate-50 text-slate-500 text-xs font-medium rounded-full border border-slate-100">Distribuicao</div>
+            <div className="px-3 py-1 bg-slate-50 text-slate-500 text-xs font-medium rounded-full border border-slate-100">{activeRangeLabel}</div>
           </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">

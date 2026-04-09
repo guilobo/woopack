@@ -14,6 +14,26 @@ class WooCommerceService
         return $this->request($this->resolveConnection($user), 'orders', $filters, 15);
     }
 
+    public function getAllOrders(User $user, array $filters = [], int $perPage = 100): array
+    {
+        $connection = $this->resolveConnection($user);
+        $page = 1;
+        $orders = [];
+
+        do {
+            $batch = $this->request($connection, 'orders', [
+                ...$filters,
+                'page' => $page,
+                'per_page' => $perPage,
+            ], 15);
+
+            $orders = [...$orders, ...$batch];
+            $page++;
+        } while (count($batch) === $perPage);
+
+        return $orders;
+    }
+
     public function getOrder(User $user, int|string $orderId): array
     {
         return $this->request($this->resolveConnection($user), "orders/{$orderId}", [], 10);
