@@ -49,7 +49,7 @@
         letter-spacing: 0.1em;
         text-transform: uppercase;
         color: #fff;
-        background: {{ $result['status'] === 'success' ? "'var(--success)'" : "'var(--error)'" }};
+        background: {{ $result['status'] === 'success' ? 'var(--success)' : 'var(--error)' }};
       }
 
       h1 {
