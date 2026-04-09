@@ -133,6 +133,52 @@ it('serves public legal pages for the meta app setup', function (): void {
         ->assertSee('Exclusao de Dados do Usuario');
 });
 
+it('provides meta oauth configuration for an authenticated user', function (): void {
+    config([
+        'woopack.meta_app_id' => '1262833955826800',
+        'woopack.meta_graph_version' => 'v25.0',
+    ]);
+
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/meta/connect/config')
+        ->assertOk()
+        ->assertJsonPath('app_id', '1262833955826800')
+        ->assertJsonPath('redirect_uri', route('meta.callback'));
+
+    expect($response->json('state'))->not->toBeEmpty();
+    expect($response->json('auth_url'))->toContain('facebook.com/v25.0/dialog/oauth');
+});
+
+it('accepts a valid meta oauth callback', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->getJson('/api/meta/connect/config');
+
+    $state = session('meta_oauth.state');
+
+    $this->get("/auth/meta/callback?state={$state}&code=test-code")
+        ->assertOk()
+        ->assertSee('Retorno recebido com sucesso')
+        ->assertSee('Autorizacao recebida com sucesso');
+
+    expect(session('meta_oauth_result.status'))->toBe('success');
+    expect(session('meta_oauth_result.code'))->toBe('test-code');
+});
+
+it('rejects a meta oauth callback with invalid state', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->getJson('/api/meta/connect/config');
+
+    $this->get('/auth/meta/callback?state=invalid&code=test-code')
+        ->assertOk()
+        ->assertSee('Nao foi possivel concluir a autorizacao');
+
+    expect(session('meta_oauth_result.status'))->toBe('error');
+});
+
 it('returns auth payload for the active user', function (): void {
     $user = User::factory()->admin()->create();
     woocommerceConnection($user);

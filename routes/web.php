@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\InvitationController;
+use App\Http\Controllers\Api\MetaAuthController;
 use App\Http\Controllers\Api\OrderController;
 use Illuminate\Support\Facades\Route;
 
@@ -121,6 +122,9 @@ Route::prefix('api')->group(function (): void {
         Route::get('/integration', [IntegrationController::class, 'show']);
         Route::put('/integration', [IntegrationController::class, 'update']);
         Route::post('/integration/test', [IntegrationController::class, 'test']);
+        Route::get('/meta/connect/config', [MetaAuthController::class, 'config']);
+        Route::get('/meta/connect/status', [MetaAuthController::class, 'status']);
+        Route::delete('/meta/connect/status', [MetaAuthController::class, 'clearStatus']);
         Route::post('/invitations', [InvitationController::class, 'store'])->middleware('woopack.admin');
         Route::get('/orders', [OrderController::class, 'index']);
         Route::get('/orders/{id}', [OrderController::class, 'show'])->whereNumber('id');
@@ -128,6 +132,8 @@ Route::prefix('api')->group(function (): void {
         Route::get('/stats', [OrderController::class, 'stats']);
     });
 });
+
+Route::get('/auth/meta/callback', [MetaAuthController::class, 'callback'])->name('meta.callback');
 
 Route::view('/{any?}', 'app')
     ->where('any', '.*')
