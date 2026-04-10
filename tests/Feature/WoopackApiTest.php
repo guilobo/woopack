@@ -215,6 +215,60 @@ it('stores whatsapp connection using the embedded signup authorization code', fu
     expect($user->whatsAppConnection?->access_token)->toBe('LONG');
 });
 
+it('falls back to an alternate redirect uri when the first oauth exchange is rejected by meta', function (): void {
+    config([
+        'woopack.meta_app_id' => '1262833955826800',
+        'woopack.meta_app_secret' => 'secret',
+        'woopack.meta_graph_version' => 'v25.0',
+    ]);
+
+    $user = User::factory()->create();
+
+    Http::fake(function ($request) {
+        $url = $request->url();
+
+        if (str_starts_with($url, 'https://graph.facebook.com/v25.0/oauth/access_token')) {
+            parse_str(parse_url($url, PHP_URL_QUERY) ?: '', $query);
+
+            if (($query['grant_type'] ?? null) === 'fb_exchange_token') {
+                return Http::response(['access_token' => 'LONG', 'token_type' => 'bearer', 'expires_in' => 60 * 24 * 60 * 60]);
+            }
+
+            $redirectUri = (string) ($query['redirect_uri'] ?? '');
+            if ($redirectUri === 'https://www.facebook.com/connect/login_success.html') {
+                return Http::response([
+                    'error' => [
+                        'message' => "Can't load URL: The domain of this URL isn't included in the app's domains.",
+                    ],
+                ], 400);
+            }
+
+            return Http::response(['access_token' => 'SHORT', 'token_type' => 'bearer', 'expires_in' => 3600]);
+        }
+
+        if (str_starts_with($url, 'https://graph.facebook.com/v25.0/1092155150647314')) {
+            return Http::response([
+                'display_phone_number' => '+55 48 99670-4729',
+                'verified_name' => 'Indoor Tech',
+                'quality_rating' => 'GREEN',
+            ]);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $this->actingAs($user)
+        ->postJson('/api/whatsapp/connect', [
+            'authorization_code' => 'AQB_TEST_CODE',
+            'business_id' => '2016512105057758',
+            'waba_id' => '26707985285502980',
+            'phone_number_id' => '1092155150647314',
+        ])
+        ->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('connection.masked_access_token', '***LONG');
+});
+
 it('refreshes phone number details when testing whatsapp connection', function (): void {
     config([
         'woopack.meta_graph_version' => 'v25.0',

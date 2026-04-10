@@ -87,23 +87,41 @@ class WhatsAppController extends Controller
                 ];
             } else {
                 $authorizationCode = (string) $validated['authorization_code'];
-                $redirectUri = route('meta.callback');
+                $candidateRedirectUris = [
+                    // Embedded Signup / JS SDK flow.
+                    'https://www.facebook.com/connect/login_success.html',
+                    // Server-side OAuth flow used in other parts of the app.
+                    route('meta.callback'),
+                ];
 
-                try {
-                    $token = $this->metaGraph->exchangeAuthorizationCode($authorizationCode, $redirectUri);
-                } catch (MetaGraphException $exception) {
-                    // If the code was generated via JS SDK, Meta expects login_success.html as redirect_uri.
-                    $needsFallback = $exception->status() === 400
-                        && str_contains(strtolower($exception->getMessage()), 'redirect_uri');
+                $lastException = null;
+                foreach ($candidateRedirectUris as $redirectUri) {
+                    try {
+                        $token = $this->metaGraph->exchangeAuthorizationCode($authorizationCode, $redirectUri);
+                        $lastException = null;
+                        break;
+                    } catch (MetaGraphException $exception) {
+                        $lastException = $exception;
 
-                    if (! $needsFallback) {
-                        throw $exception;
+                        // Most "wrong redirect" issues come back as 400 with messages about redirect_uri/app domains.
+                        $msg = strtolower($exception->getMessage());
+                        $isRedirectIssue = $exception->status() === 400
+                            && (
+                                str_contains($msg, 'redirect_uri')
+                                || str_contains($msg, "can't load url")
+                                || str_contains($msg, 'app domains')
+                                || str_contains($msg, "isn't included in the app's domains")
+                                || str_contains($msg, 'domain of this url')
+                            );
+
+                        if (! $isRedirectIssue) {
+                            throw $exception;
+                        }
                     }
+                }
 
-                    $token = $this->metaGraph->exchangeAuthorizationCode(
-                        $authorizationCode,
-                        'https://www.facebook.com/connect/login_success.html',
-                    );
+                if (! is_array($token)) {
+                    throw $lastException ?: new MetaGraphException('Failed to exchange authorization code.', 500);
                 }
 
                 try {
