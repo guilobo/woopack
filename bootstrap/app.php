@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->validateCsrfTokens(except: [
             'api/*',
+            'webhooks/meta/whatsapp',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -53,6 +53,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
   const [whatsAppLoading, setWhatsAppLoading] = useState(true);
   const [whatsAppSaving, setWhatsAppSaving] = useState(false);
   const [whatsAppTesting, setWhatsAppTesting] = useState(false);
+  const [whatsAppSendingTestMessage, setWhatsAppSendingTestMessage] = useState(false);
   const [whatsAppEmbeddedLoading, setWhatsAppEmbeddedLoading] = useState(false);
   const [storeUrl, setStoreUrl] = useState('');
   const [consumerKey, setConsumerKey] = useState('');
@@ -71,6 +72,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
   const [whatsAppBusinessId, setWhatsAppBusinessId] = useState('');
   const [whatsAppWabaId, setWhatsAppWabaId] = useState('');
   const [whatsAppPhoneNumberId, setWhatsAppPhoneNumberId] = useState('');
+  const [whatsAppTestRecipient, setWhatsAppTestRecipient] = useState('');
   const [whatsAppError, setWhatsAppError] = useState('');
   const [whatsAppSuccess, setWhatsAppSuccess] = useState('');
   const whatsAppPendingRef = useRef({
@@ -525,6 +527,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
       setWhatsAppBusinessId('');
       setWhatsAppWabaId('');
       setWhatsAppPhoneNumberId('');
+      setWhatsAppTestRecipient('');
       setWhatsAppSuccess('WhatsApp desconectado.');
       onUpdated({
         authenticated: true,
@@ -537,6 +540,28 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
       setWhatsAppError(err.response?.data?.error || 'Nao foi possivel desconectar o WhatsApp.');
     } finally {
       setWhatsAppTesting(false);
+    }
+  };
+
+  const handleWhatsAppSendTestMessage = async () => {
+    setWhatsAppSendingTestMessage(true);
+    setWhatsAppError('');
+    setWhatsAppSuccess('');
+
+    try {
+      const response = await api.post('/whatsapp/test-message', {
+        to: whatsAppTestRecipient,
+      });
+
+      const messageId = response.data?.message_id ? ` ID: ${response.data.message_id}` : '';
+      setWhatsAppSuccess(`${response.data?.message || 'Mensagem de teste enviada com sucesso.'}${messageId}`);
+    } catch (err: any) {
+      setWhatsAppError(
+        err.response?.data?.error
+          || 'Nao foi possivel enviar a mensagem de teste. Se o numero nao estiver em uma janela ativa de 24h, a Meta pode bloquear texto simples.'
+      );
+    } finally {
+      setWhatsAppSendingTestMessage(false);
     }
   };
 
@@ -752,7 +777,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
                       onChange={(event) => setWhatsAppAuthCode(event.target.value)}
                       placeholder="Cole aqui o code AQB..."
                       className="input-modern min-h-[100px] resize-y"
-                      required
+                      required={!whatsAppInfo}
                     />
                     <p className="text-xs text-slate-500">Esse codigo e trocado por um access token e nao fica visivel depois de salvo.</p>
                   </div>
@@ -784,6 +809,42 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
 
                   {whatsAppError && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">{whatsAppError}</div>}
                   {whatsAppSuccess && <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{whatsAppSuccess}</div>}
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="space-y-4">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-800">Enviar mensagem de teste</div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Informe um telefone em formato internacional. Esta v1 usa texto simples, entao a Meta pode exigir uma janela ativa de 24h para permitir o envio.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium text-slate-700">Telefone de destino</label>
+                          <input
+                            type="text"
+                            value={whatsAppTestRecipient}
+                            onChange={(event) => setWhatsAppTestRecipient(event.target.value)}
+                            placeholder="+55 48 99999-9999"
+                            className="input-modern"
+                            disabled={!isWhatsAppReady || whatsAppSendingTestMessage}
+                          />
+                        </div>
+
+                        <div className="flex items-end">
+                          <button
+                            type="button"
+                            onClick={handleWhatsAppSendTestMessage}
+                            disabled={whatsAppSendingTestMessage || !isWhatsAppReady || !whatsAppTestRecipient.trim()}
+                            className="btn-primary w-full py-3 disabled:opacity-50"
+                          >
+                            {whatsAppSendingTestMessage ? 'Enviando...' : 'Enviar mensagem de teste'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-slate-500">Depois de conectar, voce pode testar e desconectar quando quiser.</p>

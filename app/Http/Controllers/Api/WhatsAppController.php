@@ -196,6 +196,24 @@ class WhatsAppController extends Controller
                 ];
             }
 
+            if (! filled($resolvedWabaId) || ! filled($resolvedPhoneNumberId)) {
+                throw new MetaGraphException('Meta did not return all WhatsApp assets required to operate this connection.', 422);
+            }
+
+            Log::info('whatsapp.subscription.attempt', [
+                'user_id' => $user->id,
+                'waba_id' => $resolvedWabaId,
+                'phone_number_id' => $resolvedPhoneNumberId,
+            ]);
+
+            $this->metaGraph->subscribeAppToWaba((string) $resolvedWabaId, $token['access_token']);
+
+            Log::info('whatsapp.subscription.success', [
+                'user_id' => $user->id,
+                'waba_id' => $resolvedWabaId,
+                'phone_number_id' => $resolvedPhoneNumberId,
+            ]);
+
             $connection = $user->whatsAppConnection()->updateOrCreate(
                 ['user_id' => $user->id],
                 [
@@ -237,6 +255,59 @@ class WhatsAppController extends Controller
                 'business_id' => $validated['business_id'] ?? null,
                 'waba_id' => $validated['waba_id'] ?? null,
                 'phone_number_id' => $validated['phone_number_id'] ?? null,
+            ]);
+
+            return response()->json(['error' => $exception->getMessage()], $exception->status());
+        }
+    }
+
+    public function sendTestMessage(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user()->loadMissing('whatsAppConnection');
+        $connection = $user->whatsAppConnection;
+
+        if (! $connection || ! filled($connection->access_token) || ! filled($connection->phone_number_id) || ! filled($connection->waba_id)) {
+            return response()->json(['error' => 'WhatsApp connection not configured'], 400);
+        }
+
+        $validated = $request->validate([
+            'to' => ['required', 'string', 'max:32'],
+            'message' => ['nullable', 'string', 'max:4096'],
+        ]);
+
+        $body = trim((string) ($validated['message'] ?? config('woopack.whatsapp_test_message_text')));
+        if ($body === '') {
+            $body = 'Mensagem de teste do WooPack. Sua integracao com o WhatsApp Cloud API esta funcionando.';
+        }
+
+        Log::info('whatsapp.message_test.attempt', [
+            'user_id' => $user->id,
+            'phone_number_id' => $connection->phone_number_id,
+            'waba_id' => $connection->waba_id,
+            'to_suffix' => substr(preg_replace('/\D+/', '', (string) $validated['to']) ?? '', -4),
+        ]);
+
+        try {
+            $result = $this->metaGraph->sendTextMessage(
+                (string) $connection->phone_number_id,
+                (string) $connection->access_token,
+                (string) $validated['to'],
+                $body,
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Mensagem de teste enviada com sucesso.',
+                'message_id' => $result['message_id'],
+                'to' => $result['to'],
+            ]);
+        } catch (MetaGraphException $exception) {
+            Log::warning('whatsapp.message_test.failed', [
+                'user_id' => $user->id,
+                'phone_number_id' => $connection->phone_number_id,
+                'status' => $exception->status(),
+                'message' => $exception->getMessage(),
             ]);
 
             return response()->json(['error' => $exception->getMessage()], $exception->status());

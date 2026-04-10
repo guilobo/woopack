@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\MetaAuthController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\WhatsAppController;
+use App\Http\Controllers\Api\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/politica-de-privacidade', 'legal', [
@@ -130,6 +131,7 @@ Route::prefix('api')->group(function (): void {
         Route::get('/whatsapp', [WhatsAppController::class, 'show']);
         Route::post('/whatsapp/connect', [WhatsAppController::class, 'connect']);
         Route::post('/whatsapp/test', [WhatsAppController::class, 'test']);
+        Route::post('/whatsapp/test-message', [WhatsAppController::class, 'sendTestMessage']);
         Route::delete('/whatsapp', [WhatsAppController::class, 'disconnect']);
         Route::post('/invitations', [InvitationController::class, 'store'])->middleware('woopack.admin');
         Route::get('/orders', [OrderController::class, 'index']);
@@ -140,6 +142,8 @@ Route::prefix('api')->group(function (): void {
 });
 
 Route::get('/auth/meta/callback', [MetaAuthController::class, 'callback'])->name('meta.callback');
+Route::get('/webhooks/meta/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('meta.whatsapp.webhook.verify');
+Route::post('/webhooks/meta/whatsapp', [WhatsAppWebhookController::class, 'receive'])->name('meta.whatsapp.webhook.receive');
 
 Route::view('/{any?}', 'app')
     ->where('any', '.*')

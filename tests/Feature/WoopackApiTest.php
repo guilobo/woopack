@@ -4,7 +4,10 @@ use App\Models\Invitation;
 use App\Models\PackingStatus;
 use App\Models\User;
 use App\Models\WhatsAppConnection;
+use App\Models\WhatsAppWebhookLog;
 use App\Models\WooCommerceConnection;
+use App\Jobs\ForwardWhatsAppWebhookJob;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
@@ -212,6 +215,9 @@ it('stores whatsapp connection using the embedded signup authorization code', fu
         'https://graph.facebook.com/v25.0/oauth/access_token*' => Http::sequence()
             ->push(['access_token' => 'SHORT', 'token_type' => 'bearer', 'expires_in' => 3600])
             ->push(['access_token' => 'LONG', 'token_type' => 'bearer', 'expires_in' => 60 * 24 * 60 * 60]),
+        'https://graph.facebook.com/v25.0/26707985285502980/subscribed_apps*' => Http::response([
+            'success' => true,
+        ]),
         'https://graph.facebook.com/v25.0/1092155150647314*' => Http::response([
             'display_phone_number' => '+55 48 99670-4729',
             'verified_name' => 'Indoor Tech',
@@ -258,6 +264,9 @@ it('discovers whatsapp assets from the meta token when the callback only returns
                     ],
                 ],
             ],
+        ]),
+        'https://graph.facebook.com/v25.0/26707985285502980/subscribed_apps*' => Http::response([
+            'success' => true,
         ]),
         'https://graph.facebook.com/v25.0/26707985285502980/phone_numbers*' => Http::response([
             'data' => [
@@ -321,6 +330,10 @@ it('falls back to an alternate redirect uri when the first oauth exchange is rej
             ]);
         }
 
+        if (str_starts_with($url, 'https://graph.facebook.com/v25.0/26707985285502980/subscribed_apps')) {
+            return Http::response(['success' => true]);
+        }
+
         return Http::response([], 404);
     });
 
@@ -344,6 +357,9 @@ it('stores whatsapp connection directly from an embedded signup access token', f
     $user = User::factory()->create();
 
     Http::fake([
+        'https://graph.facebook.com/v25.0/26707985285502980/subscribed_apps*' => Http::response([
+            'success' => true,
+        ]),
         'https://graph.facebook.com/v25.0/1092155150647314*' => Http::response([
             'display_phone_number' => '+55 48 99670-4729',
             'verified_name' => 'Indoor Tech',
@@ -391,6 +407,187 @@ it('refreshes phone number details when testing whatsapp connection', function (
         ->assertJsonPath('phone.display_phone_number', '+55 48 99670-4729');
 
     expect($connection->refresh()->verified_name)->toBe('Indoor Tech');
+});
+
+it('fails predictably when the whatsapp webhook subscription cannot be created', function (): void {
+    config([
+        'woopack.meta_app_id' => '1262833955826800',
+        'woopack.meta_app_secret' => 'secret',
+        'woopack.meta_graph_version' => 'v25.0',
+    ]);
+
+    $user = User::factory()->create();
+
+    Http::fake([
+        'https://graph.facebook.com/v25.0/oauth/access_token*' => Http::sequence()
+            ->push(['access_token' => 'SHORT', 'token_type' => 'bearer', 'expires_in' => 3600])
+            ->push(['access_token' => 'LONG', 'token_type' => 'bearer', 'expires_in' => 60 * 24 * 60 * 60]),
+        'https://graph.facebook.com/v25.0/26707985285502980/subscribed_apps*' => Http::response([
+            'error' => [
+                'message' => 'Webhook subscription denied.',
+            ],
+        ], 400),
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/whatsapp/connect', [
+            'authorization_code' => 'AQB_TEST_CODE',
+            'business_id' => '2016512105057758',
+            'waba_id' => '26707985285502980',
+            'phone_number_id' => '1092155150647314',
+        ])
+        ->assertStatus(400)
+        ->assertJson(['error' => 'Webhook subscription denied.']);
+
+    expect($user->refresh()->whatsAppConnection)->toBeNull();
+});
+
+it('sends a whatsapp test message for a connected user', function (): void {
+    config([
+        'woopack.meta_graph_version' => 'v25.0',
+        'woopack.whatsapp_test_message_text' => 'Mensagem de teste do WooPack.',
+    ]);
+
+    $user = User::factory()->create();
+    whatsAppConnection($user);
+
+    Http::fake([
+        'https://graph.facebook.com/v25.0/1092155150647314/messages' => Http::response([
+            'messages' => [
+                ['id' => 'wamid.TEST123'],
+            ],
+            'contacts' => [
+                ['wa_id' => '5548999999999'],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/whatsapp/test-message', [
+            'to' => '+55 (48) 99999-9999',
+        ])
+        ->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('message_id', 'wamid.TEST123')
+        ->assertJsonPath('to', '5548999999999');
+});
+
+it('requires a configured whatsapp connection to send a test message', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->postJson('/api/whatsapp/test-message', [
+            'to' => '5548999999999',
+        ])
+        ->assertStatus(400)
+        ->assertJson(['error' => 'WhatsApp connection not configured']);
+});
+
+it('verifies the public whatsapp webhook with the configured token', function (): void {
+    config([
+        'woopack.whatsapp_webhook_verify_token' => 'verify-token',
+    ]);
+
+    $this->get('/webhooks/meta/whatsapp?hub.mode=subscribe&hub.verify_token=verify-token&hub.challenge=abc123')
+        ->assertOk()
+        ->assertSeeText('abc123');
+});
+
+it('rejects the whatsapp webhook verification with an invalid token', function (): void {
+    config([
+        'woopack.whatsapp_webhook_verify_token' => 'verify-token',
+    ]);
+
+    $this->get('/webhooks/meta/whatsapp?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=abc123')
+        ->assertStatus(403);
+});
+
+it('stores webhook payloads even when forwarding is disabled', function (): void {
+    config([
+        'woopack.whatsapp_webhook_forward_url' => null,
+    ]);
+
+    $user = User::factory()->create();
+    whatsAppConnection($user);
+
+    $payload = [
+        'entry' => [
+            [
+                'changes' => [
+                    [
+                        'value' => [
+                            'metadata' => [
+                                'phone_number_id' => '1092155150647314',
+                            ],
+                            'messages' => [
+                                [
+                                    'from' => '5548999999999',
+                                    'id' => 'wamid.INBOUND1',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    $this->postJson('/webhooks/meta/whatsapp', $payload)
+        ->assertOk()
+        ->assertJson(['success' => true, 'received' => true]);
+
+    $log = WhatsAppWebhookLog::query()->latest('id')->first();
+
+    expect($log)->not->toBeNull();
+    expect($log?->user_id)->toBe($user->id);
+    expect($log?->phone_number_id)->toBe('1092155150647314');
+    expect($log?->event_type)->toBe('messages');
+    expect($log?->forward_status)->toBe('disabled');
+});
+
+it('queues webhook forwarding to n8n when a forward url is configured', function (): void {
+    config([
+        'woopack.whatsapp_webhook_forward_url' => 'https://n8n.test/webhook/whatsapp',
+    ]);
+
+    Bus::fake();
+
+    $user = User::factory()->create();
+    whatsAppConnection($user);
+
+    $payload = [
+        'entry' => [
+            [
+                'changes' => [
+                    [
+                        'value' => [
+                            'metadata' => [
+                                'phone_number_id' => '1092155150647314',
+                            ],
+                            'statuses' => [
+                                [
+                                    'id' => 'wamid.STATUS1',
+                                    'status' => 'delivered',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    $this->postJson('/webhooks/meta/whatsapp', $payload)
+        ->assertOk()
+        ->assertJson(['success' => true, 'received' => true]);
+
+    $log = WhatsAppWebhookLog::query()->latest('id')->first();
+
+    expect($log)->not->toBeNull();
+    expect($log?->event_type)->toBe('statuses');
+    expect($log?->forward_status)->toBe('queued');
+
+    Bus::assertDispatched(ForwardWhatsAppWebhookJob::class);
 });
 
 it('accepts a valid meta oauth callback', function (): void {
