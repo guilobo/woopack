@@ -109,7 +109,7 @@ class WhatsAppController extends Controller
             'expires_in' => ['nullable', 'integer', 'min:0'],
             'business_id' => ['nullable', 'string', 'max:64'],
             'waba_id' => ['nullable', 'string', 'max:64'],
-            'phone_number_id' => ['nullable', 'string', 'max:64'],
+            'phone_number_id' => ['required_with:authorization_code,access_token', 'string', 'max:64'],
         ]);
 
         try {
