@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class MetaAuthController extends Controller
@@ -74,10 +75,15 @@ class MetaAuthController extends Controller
     public function callback(Request $request)
     {
         $oauth = $request->session()->get('meta_oauth');
+        $query = $request->query();
         $state = (string) $request->query('state', '');
         $code = (string) $request->query('code', '');
         $error = (string) $request->query('error', '');
         $errorMessage = (string) $request->query('error_message', '');
+        $businessId = (string) $request->query('business_id', '');
+        $wabaId = (string) $request->query('waba_id', '');
+        $phoneNumberId = (string) $request->query('phone_number_id', '');
+        $displayPhoneNumber = (string) $request->query('display_phone_number', '');
 
         $matchesState = is_array($oauth)
             && hash_equals((string) Arr::get($oauth, 'state', ''), $state);
@@ -100,10 +106,30 @@ class MetaAuthController extends Controller
             'status' => $status,
             'message' => $message,
             'code' => $status === 'success' ? $code : null,
+            'business_id' => $businessId !== '' ? $businessId : null,
+            'waba_id' => $wabaId !== '' ? $wabaId : null,
+            'phone_number_id' => $phoneNumberId !== '' ? $phoneNumberId : null,
+            'display_phone_number' => $displayPhoneNumber !== '' ? $displayPhoneNumber : null,
+            'query_keys' => array_keys($query),
             'state' => $state !== '' ? $state : null,
             'error' => $error !== '' ? $error : null,
             'error_message' => $errorMessage !== '' ? $errorMessage : null,
         ];
+
+        Log::info('meta.oauth.callback', [
+            'status' => $status,
+            'user_id' => Arr::get($oauth, 'user_id'),
+            'matches_state' => $matchesState,
+            'query_keys' => array_keys($query),
+            'has_code' => $code !== '',
+            'code_length' => strlen($code),
+            'business_id' => $result['business_id'],
+            'waba_id' => $result['waba_id'],
+            'phone_number_id' => $result['phone_number_id'],
+            'display_phone_number' => $result['display_phone_number'],
+            'error' => $result['error'],
+            'error_message' => $result['error_message'],
+        ]);
 
         $request->session()->put('meta_oauth_result', $result);
 

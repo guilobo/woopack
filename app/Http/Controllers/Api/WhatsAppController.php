@@ -8,6 +8,7 @@ use App\Services\MetaGraphException;
 use App\Services\MetaGraphService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class WhatsAppController extends Controller
@@ -116,6 +117,15 @@ class WhatsAppController extends Controller
             $token = null;
             $expiresAt = null;
 
+            Log::info('whatsapp.connect.attempt', [
+                'user_id' => $user->id,
+                'has_authorization_code' => filled($validated['authorization_code'] ?? null),
+                'has_access_token' => filled($validated['access_token'] ?? null),
+                'business_id' => $validated['business_id'] ?? null,
+                'waba_id' => $validated['waba_id'] ?? null,
+                'phone_number_id' => $validated['phone_number_id'] ?? null,
+            ]);
+
             if (filled($validated['access_token'] ?? null)) {
                 $token = [
                     'access_token' => (string) $validated['access_token'],
@@ -202,6 +212,15 @@ class WhatsAppController extends Controller
                 ],
             ]);
         } catch (MetaGraphException $exception) {
+            Log::warning('whatsapp.connect.failed', [
+                'user_id' => $user->id,
+                'status' => $exception->status(),
+                'message' => $exception->getMessage(),
+                'business_id' => $validated['business_id'] ?? null,
+                'waba_id' => $validated['waba_id'] ?? null,
+                'phone_number_id' => $validated['phone_number_id'] ?? null,
+            ]);
+
             return response()->json(['error' => $exception->getMessage()], $exception->status());
         }
     }

@@ -104,6 +104,53 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
+      if (event.origin === window.location.origin) {
+        const localPayload = event.data;
+        if (
+          localPayload &&
+          typeof localPayload === 'object' &&
+          localPayload.type === 'woopack-meta-oauth' &&
+          localPayload.payload
+        ) {
+          const payload = localPayload.payload as {
+            status?: string;
+            code?: string | null;
+            business_id?: string | null;
+            waba_id?: string | null;
+            phone_number_id?: string | null;
+            display_phone_number?: string | null;
+            error_message?: string | null;
+            message?: string | null;
+          };
+
+          if (payload.status !== 'success' || !payload.code) {
+            setWhatsAppError(payload.error_message || payload.message || 'Nao foi possivel concluir a autorizacao da Meta.');
+            return;
+          }
+
+          if (payload.business_id) {
+            setWhatsAppBusinessId(payload.business_id);
+            whatsAppPendingRef.current.business_id = payload.business_id;
+          }
+
+          if (payload.waba_id) {
+            setWhatsAppWabaId(payload.waba_id);
+            whatsAppPendingRef.current.waba_id = payload.waba_id;
+          }
+
+          if (payload.phone_number_id) {
+            setWhatsAppPhoneNumberId(payload.phone_number_id);
+            whatsAppPendingRef.current.phone_number_id = payload.phone_number_id;
+          }
+
+          setWhatsAppAuthCode(payload.code);
+          whatsAppPendingRef.current.code = payload.code;
+          setWhatsAppSuccess('Codigo recebido da Meta. Finalizando conexao...');
+          void tryAutoConnectWhatsApp();
+          return;
+        }
+      }
+
       // Accept only Meta origins.
       if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') {
         return;
@@ -396,6 +443,9 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
             result: {
               status: string;
               code?: string | null;
+              business_id?: string | null;
+              waba_id?: string | null;
+              phone_number_id?: string | null;
               message?: string | null;
               error_message?: string | null;
             } | null;
@@ -418,6 +468,21 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
           if (result.status !== 'success' || !result.code) {
             setWhatsAppError(result.error_message || result.message || 'Nao foi possivel concluir a autorizacao da Meta.');
             return;
+          }
+
+          if (result.business_id) {
+            setWhatsAppBusinessId(result.business_id);
+            whatsAppPendingRef.current.business_id = result.business_id;
+          }
+
+          if (result.waba_id) {
+            setWhatsAppWabaId(result.waba_id);
+            whatsAppPendingRef.current.waba_id = result.waba_id;
+          }
+
+          if (result.phone_number_id) {
+            setWhatsAppPhoneNumberId(result.phone_number_id);
+            whatsAppPendingRef.current.phone_number_id = result.phone_number_id;
           }
 
           setWhatsAppAuthCode(result.code);
