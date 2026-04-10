@@ -126,6 +126,7 @@ Route::prefix('api')->group(function (): void {
         Route::get('/meta/connect/config', [MetaAuthController::class, 'config']);
         Route::get('/meta/connect/status', [MetaAuthController::class, 'status']);
         Route::delete('/meta/connect/status', [MetaAuthController::class, 'clearStatus']);
+        Route::get('/whatsapp/embed/config', [WhatsAppController::class, 'embeddedConfig']);
         Route::get('/whatsapp', [WhatsAppController::class, 'show']);
         Route::post('/whatsapp/connect', [WhatsAppController::class, 'connect']);
         Route::post('/whatsapp/test', [WhatsAppController::class, 'test']);

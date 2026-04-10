@@ -15,6 +15,30 @@ class WhatsAppController extends Controller
     {
     }
 
+    public function embeddedConfig(Request $request): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        $appId = (string) config('woopack.meta_app_id');
+        $configId = (string) config('woopack.meta_wa_config_id');
+        $graphVersion = (string) config('woopack.meta_graph_version', 'v25.0');
+
+        if ($appId === '' || $configId === '') {
+            return response()->json([
+                'error' => 'WhatsApp Embedded Signup is not configured.',
+            ], 500);
+        }
+
+        return response()->json([
+            'app_id' => $appId,
+            'config_id' => $configId,
+            'graph_version' => $graphVersion,
+            'origin' => url('/'),
+            'user_id' => $user->id,
+        ]);
+    }
+
     public function show(Request $request): JsonResponse
     {
         /** @var User $user */
@@ -44,21 +68,49 @@ class WhatsAppController extends Controller
         $user = $request->user();
 
         $validated = $request->validate([
-            'authorization_code' => ['required', 'string', 'max:2048'],
+            'authorization_code' => ['required_without:access_token', 'string', 'max:2048'],
+            'access_token' => ['required_without:authorization_code', 'string', 'max:4096'],
+            'expires_in' => ['nullable', 'integer', 'min:0'],
             'business_id' => ['nullable', 'string', 'max:64'],
             'waba_id' => ['nullable', 'string', 'max:64'],
             'phone_number_id' => ['nullable', 'string', 'max:64'],
         ]);
 
         try {
-            $redirectUri = route('meta.callback');
-            $short = $this->metaGraph->exchangeAuthorizationCode($validated['authorization_code'], $redirectUri);
+            $token = null;
+            $expiresAt = null;
 
-            $token = $short;
-            try {
-                $token = $this->metaGraph->exchangeForLongLivedToken($short['access_token']);
-            } catch (MetaGraphException) {
-                // Keep short-lived token if exchange fails.
+            if (filled($validated['access_token'] ?? null)) {
+                $token = [
+                    'access_token' => (string) $validated['access_token'],
+                    'expires_in' => is_numeric($validated['expires_in'] ?? null) ? (int) $validated['expires_in'] : null,
+                ];
+            } else {
+                $authorizationCode = (string) $validated['authorization_code'];
+                $redirectUri = route('meta.callback');
+
+                try {
+                    $token = $this->metaGraph->exchangeAuthorizationCode($authorizationCode, $redirectUri);
+                } catch (MetaGraphException $exception) {
+                    // If the code was generated via JS SDK, Meta expects login_success.html as redirect_uri.
+                    $needsFallback = $exception->status() === 400
+                        && str_contains(strtolower($exception->getMessage()), 'redirect_uri');
+
+                    if (! $needsFallback) {
+                        throw $exception;
+                    }
+
+                    $token = $this->metaGraph->exchangeAuthorizationCode(
+                        $authorizationCode,
+                        'https://www.facebook.com/connect/login_success.html',
+                    );
+                }
+
+                try {
+                    $token = $this->metaGraph->exchangeForLongLivedToken($token['access_token']);
+                } catch (MetaGraphException) {
+                    // Keep short-lived token if exchange fails.
+                }
             }
 
             $expiresAt = $this->metaGraph->expiresAtFromSeconds($token['expires_in'] ?? null);
@@ -147,4 +199,3 @@ class WhatsAppController extends Controller
         return "***{$suffix}";
     }
 }
-

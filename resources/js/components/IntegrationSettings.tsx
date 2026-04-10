@@ -1,8 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Copy, KeyRound, Link as LinkIcon, PlugZap, UserPlus } from 'lucide-react';
 import { motion } from 'motion/react';
 import api from '../api';
 import type { AuthState } from '../App';
+
+declare global {
+  interface Window {
+    FB?: any;
+    fbAsyncInit?: () => void;
+  }
+}
 
 interface IntegrationSettingsProps {
   authState: AuthState;
@@ -35,6 +42,67 @@ interface WhatsAppPayload {
   } | null;
 }
 
+interface WhatsAppEmbeddedConfig {
+  app_id: string;
+  config_id: string;
+  graph_version: string;
+  origin: string;
+}
+
+function loadFacebookSdk(appId: string, graphVersion: string): Promise<void> {
+  if (typeof window === 'undefined') {
+    return Promise.reject(new Error('Facebook SDK is not available in this environment.'));
+  }
+
+  // If it's already loaded, (re)initialize to be safe.
+  if (window.FB) {
+    try {
+      window.FB.init({
+        appId,
+        cookie: true,
+        xfbml: false,
+        version: graphVersion,
+      });
+    } catch {
+      // Ignore init errors; FB SDK may already be initialized.
+    }
+
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById('facebook-jssdk');
+    if (existing) {
+      // The SDK script tag exists but window.FB isn't ready yet.
+      const wait = () => (window.FB ? resolve() : setTimeout(wait, 150));
+      wait();
+      return;
+    }
+
+    window.fbAsyncInit = () => {
+      try {
+        window.FB?.init({
+          appId,
+          cookie: true,
+          xfbml: false,
+          version: graphVersion,
+        });
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    };
+
+    const script = document.createElement('script');
+    script.id = 'facebook-jssdk';
+    script.async = true;
+    script.defer = true;
+    script.src = 'https://connect.facebook.net/en_US/sdk.js';
+    script.onerror = () => reject(new Error('Falha ao carregar o SDK da Meta.'));
+    document.body.appendChild(script);
+  });
+}
+
 export default function IntegrationSettings({ authState, onUpdated }: IntegrationSettingsProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,6 +111,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
   const [whatsAppLoading, setWhatsAppLoading] = useState(true);
   const [whatsAppSaving, setWhatsAppSaving] = useState(false);
   const [whatsAppTesting, setWhatsAppTesting] = useState(false);
+  const [whatsAppEmbeddedLoading, setWhatsAppEmbeddedLoading] = useState(false);
   const [storeUrl, setStoreUrl] = useState('');
   const [consumerKey, setConsumerKey] = useState('');
   const [consumerSecret, setConsumerSecret] = useState('');
@@ -62,9 +131,65 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
   const [whatsAppPhoneNumberId, setWhatsAppPhoneNumberId] = useState('');
   const [whatsAppError, setWhatsAppError] = useState('');
   const [whatsAppSuccess, setWhatsAppSuccess] = useState('');
+  const whatsAppPendingRef = useRef({
+    code: '',
+    business_id: '',
+    waba_id: '',
+    phone_number_id: '',
+  });
+  const whatsAppAutoConnectingRef = useRef(false);
+  const whatsAppConnectedRef = useRef(false);
 
   useEffect(() => {
     void Promise.all([loadConnection(), loadWhatsAppConnection()]);
+  }, []);
+
+  useEffect(() => {
+    whatsAppConnectedRef.current = Boolean(whatsAppInfo);
+  }, [whatsAppInfo]);
+
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      // Accept only Meta origins.
+      if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') {
+        return;
+      }
+
+      let payload: any = event.data;
+      if (typeof payload === 'string') {
+        try {
+          payload = JSON.parse(payload);
+        } catch {
+          return;
+        }
+      }
+
+      const candidates = Array.isArray(payload) ? payload : [payload];
+
+      for (const item of candidates) {
+        if (!item || typeof item !== 'object') continue;
+        if (item.type !== 'WA_EMBEDDED_SIGNUP') continue;
+        if (item.event !== 'FINISH') continue;
+
+        const data = item.data ?? {};
+        const businessId = typeof data.business_id === 'string' ? data.business_id : '';
+        const wabaId = typeof data.waba_id === 'string' ? data.waba_id : '';
+        const phoneNumberId = typeof data.phone_number_id === 'string' ? data.phone_number_id : '';
+
+        if (businessId) setWhatsAppBusinessId(businessId);
+        if (wabaId) setWhatsAppWabaId(wabaId);
+        if (phoneNumberId) setWhatsAppPhoneNumberId(phoneNumberId);
+
+        whatsAppPendingRef.current.business_id = businessId || whatsAppPendingRef.current.business_id;
+        whatsAppPendingRef.current.waba_id = wabaId || whatsAppPendingRef.current.waba_id;
+        whatsAppPendingRef.current.phone_number_id = phoneNumberId || whatsAppPendingRef.current.phone_number_id;
+
+        void tryAutoConnectWhatsApp();
+      }
+    };
+
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
   }, []);
 
   const loadConnection = async () => {
@@ -94,6 +219,51 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
       setWhatsAppError(err.response?.data?.error || 'Nao foi possivel carregar o WhatsApp.');
     } finally {
       setWhatsAppLoading(false);
+    }
+  };
+
+  const tryAutoConnectWhatsApp = async () => {
+    if (whatsAppAutoConnectingRef.current) return;
+    if (whatsAppConnectedRef.current) return;
+
+    const pending = whatsAppPendingRef.current;
+    const code = pending.code.trim();
+    const phoneId = pending.phone_number_id.trim();
+
+    // We only auto-connect once we have the code AND the phone_number_id.
+    if (!code || !phoneId) return;
+
+    whatsAppAutoConnectingRef.current = true;
+    setWhatsAppSaving(true);
+    setWhatsAppError('');
+    setWhatsAppSuccess('');
+
+    try {
+      const response = await api.post<{
+        success: boolean;
+        connection: WhatsAppPayload['connection'];
+      }>('/whatsapp/connect', {
+        authorization_code: code,
+        business_id: pending.business_id || null,
+        waba_id: pending.waba_id || null,
+        phone_number_id: phoneId,
+      });
+
+      setWhatsAppInfo(response.data.connection);
+      setWhatsAppAuthCode('');
+      setWhatsAppSuccess('WhatsApp conectado com sucesso.');
+      onUpdated({
+        authenticated: true,
+        user: authState.user,
+        is_admin: authState.is_admin,
+        has_integration: authState.has_integration,
+        has_whatsapp: true,
+      });
+    } catch (err: any) {
+      setWhatsAppError(err.response?.data?.message || err.response?.data?.error || 'Nao foi possivel conectar o WhatsApp.');
+    } finally {
+      setWhatsAppSaving(false);
+      whatsAppAutoConnectingRef.current = false;
     }
   };
 
@@ -211,6 +381,63 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
       setWhatsAppError(err.response?.data?.error || 'Nao foi possivel conectar o WhatsApp.');
     } finally {
       setWhatsAppSaving(false);
+    }
+  };
+
+  const handleWhatsAppEmbeddedSignup = async () => {
+    setWhatsAppError('');
+    setWhatsAppSuccess('');
+
+    setWhatsAppEmbeddedLoading(true);
+    try {
+      const response = await api.get<WhatsAppEmbeddedConfig>('/whatsapp/embed/config');
+      const { app_id, config_id, graph_version } = response.data;
+
+      // Reset any pending data from previous attempts.
+      whatsAppPendingRef.current = {
+        code: '',
+        business_id: '',
+        waba_id: '',
+        phone_number_id: '',
+      };
+
+      await loadFacebookSdk(app_id, graph_version);
+
+      if (!window.FB) {
+        throw new Error('SDK da Meta nao foi carregado.');
+      }
+
+      window.FB.login(
+        (fbResponse: any) => {
+          const code = String(fbResponse?.authResponse?.code ?? '').trim();
+          if (!code) {
+            const status = String(fbResponse?.status ?? '').trim();
+            if (status === 'not_authorized' || status === 'unknown') {
+              setWhatsAppError('Conexao cancelada ou nao autorizada. Verifique se popups estao liberados.');
+            } else {
+              setWhatsAppError('Nao recebemos o codigo de autorizacao. Tente novamente.');
+            }
+            return;
+          }
+
+          setWhatsAppAuthCode(code);
+          whatsAppPendingRef.current.code = code;
+          void tryAutoConnectWhatsApp();
+        },
+        {
+          config_id,
+          response_type: 'code',
+          override_default_response_type: true,
+          scope: 'business_management,whatsapp_business_management,whatsapp_business_messaging',
+          extras: {
+            sessionInfoVersion: 3,
+          },
+        }
+      );
+    } catch (err: any) {
+      setWhatsAppError(err.response?.data?.error || err.message || 'Nao foi possivel iniciar a conexao com a Meta.');
+    } finally {
+      setWhatsAppEmbeddedLoading(false);
     }
   };
 
@@ -437,6 +664,25 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
                 )}
 
                 <form onSubmit={handleWhatsAppConnect} className="space-y-5">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-800">Conectar automaticamente</div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Clique no botao abaixo para abrir o Embedded Signup da Meta e conectar seu numero. Se nada acontecer, habilite popups no navegador.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleWhatsAppEmbeddedSignup}
+                        disabled={whatsAppEmbeddedLoading || whatsAppSaving || Boolean(whatsAppInfo)}
+                        className="btn-primary min-w-[220px] py-3 disabled:opacity-50"
+                      >
+                        {whatsAppInfo ? 'WhatsApp conectado' : whatsAppEmbeddedLoading ? 'Abrindo Meta...' : 'Conectar WhatsApp Business'}
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700">Authorization code (Embedded Signup)</label>
                     <textarea
