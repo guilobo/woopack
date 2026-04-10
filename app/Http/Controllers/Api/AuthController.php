@@ -59,6 +59,7 @@ class AuthController extends Controller
                 'authenticated' => false,
                 'user' => null,
                 'has_integration' => false,
+                'has_whatsapp' => false,
                 'is_admin' => false,
             ];
         }
@@ -72,7 +73,7 @@ class AuthController extends Controller
     private function userPayload(Request $request): array
     {
         /** @var \App\Models\User $user */
-        $user = $request->user()->loadMissing('wooCommerceConnection');
+        $user = $request->user()->loadMissing('wooCommerceConnection', 'whatsAppConnection');
 
         return [
             'user' => [
@@ -81,6 +82,7 @@ class AuthController extends Controller
                 'email' => $user->email,
             ],
             'has_integration' => $user->wooCommerceConnection !== null,
+            'has_whatsapp' => $user->whatsAppConnection !== null,
             'is_admin' => (bool) $user->is_admin,
         ];
     }

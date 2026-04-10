@@ -30,6 +30,7 @@ export interface AuthState {
     email: string;
   } | null;
   has_integration: boolean;
+  has_whatsapp: boolean;
   is_admin: boolean;
 }
 
@@ -37,6 +38,7 @@ const guestState: AuthState = {
   authenticated: false,
   user: null,
   has_integration: false,
+  has_whatsapp: false,
   is_admin: false,
 };
 
@@ -45,6 +47,7 @@ function normalizeAuthState(payload: Partial<AuthState> | null | undefined): Aut
     authenticated: Boolean(payload?.authenticated),
     user: payload?.user ?? null,
     has_integration: Boolean(payload?.has_integration),
+    has_whatsapp: Boolean(payload?.has_whatsapp),
     is_admin: Boolean(payload?.is_admin),
   };
 }

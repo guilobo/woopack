@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\IntegrationController;
 use App\Http\Controllers\Api\InvitationController;
 use App\Http\Controllers\Api\MetaAuthController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\WhatsAppController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/politica-de-privacidade', 'legal', [
@@ -125,6 +126,10 @@ Route::prefix('api')->group(function (): void {
         Route::get('/meta/connect/config', [MetaAuthController::class, 'config']);
         Route::get('/meta/connect/status', [MetaAuthController::class, 'status']);
         Route::delete('/meta/connect/status', [MetaAuthController::class, 'clearStatus']);
+        Route::get('/whatsapp', [WhatsAppController::class, 'show']);
+        Route::post('/whatsapp/connect', [WhatsAppController::class, 'connect']);
+        Route::post('/whatsapp/test', [WhatsAppController::class, 'test']);
+        Route::delete('/whatsapp', [WhatsAppController::class, 'disconnect']);
         Route::post('/invitations', [InvitationController::class, 'store'])->middleware('woopack.admin');
         Route::get('/orders', [OrderController::class, 'index']);
         Route::get('/orders/{id}', [OrderController::class, 'show'])->whereNumber('id');

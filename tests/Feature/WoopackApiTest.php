@@ -3,6 +3,7 @@
 use App\Models\Invitation;
 use App\Models\PackingStatus;
 use App\Models\User;
+use App\Models\WhatsAppConnection;
 use App\Models\WooCommerceConnection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Carbon;
@@ -63,6 +64,18 @@ function makeOrder(int $id, string $status, float $total, string $dateCreated = 
             ],
         ],
     ];
+}
+
+function whatsAppConnection(User $user, array $attributes = []): WhatsAppConnection
+{
+    return WhatsAppConnection::query()->create([
+        'user_id' => $user->id,
+        'business_id' => '2016512105057758',
+        'waba_id' => '26707985285502980',
+        'phone_number_id' => '1092155150647314',
+        'access_token' => 'EAATEST',
+        ...$attributes,
+    ]);
 }
 
 afterEach(function (): void {
@@ -149,6 +162,82 @@ it('provides meta oauth configuration for an authenticated user', function (): v
 
     expect($response->json('state'))->not->toBeEmpty();
     expect($response->json('auth_url'))->toContain('facebook.com/v25.0/dialog/oauth');
+});
+
+it('requires authentication for whatsapp endpoints', function (): void {
+    $this->getJson('/api/whatsapp')
+        ->assertStatus(401);
+});
+
+it('returns a predictable error when whatsapp is not configured', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->postJson('/api/whatsapp/test')
+        ->assertStatus(400)
+        ->assertJson(['error' => 'WhatsApp connection not configured']);
+});
+
+it('stores whatsapp connection using the embedded signup authorization code', function (): void {
+    config([
+        'woopack.meta_app_id' => '1262833955826800',
+        'woopack.meta_app_secret' => 'secret',
+        'woopack.meta_graph_version' => 'v25.0',
+    ]);
+
+    $user = User::factory()->create();
+
+    Http::fake([
+        'https://graph.facebook.com/v25.0/oauth/access_token*' => Http::sequence()
+            ->push(['access_token' => 'SHORT', 'token_type' => 'bearer', 'expires_in' => 3600])
+            ->push(['access_token' => 'LONG', 'token_type' => 'bearer', 'expires_in' => 60 * 24 * 60 * 60]),
+        'https://graph.facebook.com/v25.0/1092155150647314*' => Http::response([
+            'display_phone_number' => '+55 48 99670-4729',
+            'verified_name' => 'Indoor Tech',
+            'quality_rating' => 'GREEN',
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/whatsapp/connect', [
+            'authorization_code' => 'AQB_TEST_CODE',
+            'business_id' => '2016512105057758',
+            'waba_id' => '26707985285502980',
+            'phone_number_id' => '1092155150647314',
+        ])
+        ->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('connection.phone_number_id', '1092155150647314')
+        ->assertJsonPath('connection.display_phone_number', '+55 48 99670-4729')
+        ->assertJsonPath('connection.masked_access_token', '***LONG');
+
+    expect($user->refresh()->whatsAppConnection)->not->toBeNull();
+    expect($user->whatsAppConnection?->access_token)->toBe('LONG');
+});
+
+it('refreshes phone number details when testing whatsapp connection', function (): void {
+    config([
+        'woopack.meta_graph_version' => 'v25.0',
+    ]);
+
+    $user = User::factory()->create();
+    $connection = whatsAppConnection($user);
+
+    Http::fake([
+        'https://graph.facebook.com/v25.0/1092155150647314*' => Http::response([
+            'display_phone_number' => '+55 48 99670-4729',
+            'verified_name' => 'Indoor Tech',
+            'quality_rating' => 'GREEN',
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/whatsapp/test')
+        ->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('phone.display_phone_number', '+55 48 99670-4729');
+
+    expect($connection->refresh()->verified_name)->toBe('Indoor Tech');
 });
 
 it('accepts a valid meta oauth callback', function (): void {

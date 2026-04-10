@@ -38,6 +38,11 @@ class User extends Authenticatable
         return $this->hasOne(WooCommerceConnection::class);
     }
 
+    public function whatsAppConnection(): HasOne
+    {
+        return $this->hasOne(WhatsAppConnection::class);
+    }
+
     public function packingStatuses(): HasMany
     {
         return $this->hasMany(PackingStatus::class);
