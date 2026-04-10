@@ -28,7 +28,6 @@ class MetaAuthController extends Controller
         $state = Str::uuid()->toString();
         $redirectUri = route('meta.callback');
         $scopes = [
-            'business_management',
             'whatsapp_business_management',
             'whatsapp_business_messaging',
         ];

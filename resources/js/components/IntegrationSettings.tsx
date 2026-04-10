@@ -407,8 +407,8 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
         throw new Error('SDK da Meta nao foi carregado.');
       }
 
-      window.FB.login(
-        (fbResponse: any) => {
+        window.FB.login(
+          (fbResponse: any) => {
           const code = String(fbResponse?.authResponse?.code ?? '').trim();
           if (!code) {
             const status = String(fbResponse?.status ?? '').trim();
@@ -428,7 +428,8 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
           config_id,
           response_type: 'code',
           override_default_response_type: true,
-          scope: 'business_management,whatsapp_business_management,whatsapp_business_messaging',
+          // Meta rejects `business_management` in this embedded signup flow; keep only WA scopes.
+          scope: 'whatsapp_business_management,whatsapp_business_messaging',
           extras: {
             sessionInfoVersion: 3,
           },
