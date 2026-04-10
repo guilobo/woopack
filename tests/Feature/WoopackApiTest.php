@@ -236,6 +236,52 @@ it('stores whatsapp connection using the embedded signup authorization code', fu
     expect($user->whatsAppConnection?->access_token)->toBe('LONG');
 });
 
+it('discovers whatsapp assets from the meta token when the callback only returns the authorization code', function (): void {
+    config([
+        'woopack.meta_app_id' => '1262833955826800',
+        'woopack.meta_app_secret' => 'secret',
+        'woopack.meta_graph_version' => 'v25.0',
+    ]);
+
+    $user = User::factory()->create();
+
+    Http::fake([
+        'https://graph.facebook.com/v25.0/oauth/access_token*' => Http::sequence()
+            ->push(['access_token' => 'SHORT', 'token_type' => 'bearer', 'expires_in' => 3600])
+            ->push(['access_token' => 'LONG', 'token_type' => 'bearer', 'expires_in' => 60 * 24 * 60 * 60]),
+        'https://graph.facebook.com/v25.0/debug_token*' => Http::response([
+            'data' => [
+                'granular_scopes' => [
+                    [
+                        'scope' => 'whatsapp_business_management',
+                        'target_ids' => ['26707985285502980'],
+                    ],
+                ],
+            ],
+        ]),
+        'https://graph.facebook.com/v25.0/26707985285502980/phone_numbers*' => Http::response([
+            'data' => [
+                [
+                    'id' => '1092155150647314',
+                    'display_phone_number' => '+55 48 99670-4729',
+                    'verified_name' => 'Indoor Tech',
+                    'quality_rating' => 'GREEN',
+                ],
+            ],
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/whatsapp/connect', [
+            'authorization_code' => 'AQB_TEST_CODE',
+        ])
+        ->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('connection.waba_id', '26707985285502980')
+        ->assertJsonPath('connection.phone_number_id', '1092155150647314')
+        ->assertJsonPath('connection.display_phone_number', '+55 48 99670-4729');
+});
+
 it('falls back to an alternate redirect uri when the first oauth exchange is rejected by meta', function (): void {
     config([
         'woopack.meta_app_id' => '1262833955826800',

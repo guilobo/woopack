@@ -110,7 +110,7 @@ class WhatsAppController extends Controller
             'expires_in' => ['nullable', 'integer', 'min:0'],
             'business_id' => ['nullable', 'string', 'max:64'],
             'waba_id' => ['nullable', 'string', 'max:64'],
-            'phone_number_id' => ['required_with:authorization_code,access_token', 'string', 'max:64'],
+            'phone_number_id' => ['nullable', 'string', 'max:64'],
         ]);
 
         try {
@@ -134,10 +134,10 @@ class WhatsAppController extends Controller
             } else {
                 $authorizationCode = (string) $validated['authorization_code'];
                 $candidateRedirectUris = [
-                    // Embedded Signup / JS SDK flow.
-                    'https://www.facebook.com/connect/login_success.html',
-                    // Server-side OAuth flow used in other parts of the app.
+                    // Server-side OAuth flow used in the WooPack popup.
                     route('meta.callback'),
+                    // Embedded Signup / JS SDK flow fallback.
+                    'https://www.facebook.com/connect/login_success.html',
                 ];
 
                 $lastException = null;
@@ -179,19 +179,37 @@ class WhatsAppController extends Controller
 
             $expiresAt = $this->metaGraph->expiresAtFromSeconds($token['expires_in'] ?? null);
 
+            $resolvedBusinessId = $validated['business_id'] ?? null;
+            $resolvedWabaId = $validated['waba_id'] ?? null;
+            $resolvedPhoneNumberId = $validated['phone_number_id'] ?? null;
+            $resolvedDetails = null;
+
+            if (! filled($resolvedPhoneNumberId)) {
+                $discovered = $this->metaGraph->discoverWhatsAppAssets($token['access_token']);
+                $resolvedBusinessId = $resolvedBusinessId ?: ($discovered['business_id'] ?? null);
+                $resolvedWabaId = $resolvedWabaId ?: ($discovered['waba_id'] ?? null);
+                $resolvedPhoneNumberId = $discovered['phone_number_id'] ?? null;
+                $resolvedDetails = [
+                    'display_phone_number' => $discovered['display_phone_number'] ?? null,
+                    'verified_name' => $discovered['verified_name'] ?? null,
+                    'quality_rating' => $discovered['quality_rating'] ?? null,
+                ];
+            }
+
             $connection = $user->whatsAppConnection()->updateOrCreate(
                 ['user_id' => $user->id],
                 [
-                    'business_id' => $validated['business_id'] ?? null,
-                    'waba_id' => $validated['waba_id'] ?? null,
-                    'phone_number_id' => $validated['phone_number_id'] ?? null,
+                    'business_id' => $resolvedBusinessId,
+                    'waba_id' => $resolvedWabaId,
+                    'phone_number_id' => $resolvedPhoneNumberId,
                     'access_token' => $token['access_token'],
                     'token_expires_at' => $expiresAt,
                 ],
             );
 
             if (filled($connection->phone_number_id)) {
-                $details = $this->metaGraph->getPhoneNumber($connection->phone_number_id, $connection->access_token ?? '');
+                $details = $resolvedDetails
+                    ?: $this->metaGraph->getPhoneNumber($connection->phone_number_id, $connection->access_token ?? '');
                 $connection->fill($details);
                 $connection->save();
             }

@@ -235,8 +235,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
     const accessToken = pending.access_token.trim();
     const phoneId = pending.phone_number_id.trim();
 
-    // We only auto-connect once we have a credential and the phone_number_id.
-    if ((!code && !accessToken) || !phoneId) return;
+    if (!code && !accessToken) return;
 
     whatsAppAutoConnectingRef.current = true;
     setWhatsAppSaving(true);
@@ -253,7 +252,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
         expires_in: pending.expires_in ? Number.parseInt(pending.expires_in, 10) : undefined,
         business_id: pending.business_id || null,
         waba_id: pending.waba_id || null,
-        phone_number_id: phoneId,
+        phone_number_id: phoneId || null,
       });
 
       setWhatsAppInfo(response.data.connection);
@@ -364,10 +363,6 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
     setWhatsAppSuccess('');
 
     try {
-      if (!whatsAppPhoneNumberId.trim()) {
-        throw new Error('O Phone number ID e obrigatorio para concluir a conexao do WhatsApp.');
-      }
-
       const response = await api.post<{
         success: boolean;
         connection: WhatsAppPayload['connection'];
@@ -375,7 +370,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
         authorization_code: whatsAppAuthCode,
         business_id: whatsAppBusinessId || null,
         waba_id: whatsAppWabaId || null,
-        phone_number_id: whatsAppPhoneNumberId || null,
+        phone_number_id: whatsAppPhoneNumberId.trim() || null,
       });
 
       setWhatsAppInfo(response.data.connection);
@@ -735,7 +730,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
                         </p>
                         {whatsAppInfo && !isWhatsAppReady && (
                           <p className="mt-2 text-xs font-medium text-amber-700">
-                            A conexao atual ficou incompleta. Reconecte para preencher o Phone ID e liberar o teste.
+                            A conexao atual ficou incompleta. Reconecte para tentar recuperar os dados do numero automaticamente.
                           </p>
                         )}
                       </div>
@@ -813,7 +808,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
                       ) : (
                         <button
                           type="submit"
-                          disabled={whatsAppSaving || !whatsAppPhoneNumberId.trim()}
+                          disabled={whatsAppSaving}
                           className="btn-primary min-w-[220px] py-3"
                         >
                           {whatsAppSaving ? 'Conectando...' : 'Conectar WhatsApp'}
