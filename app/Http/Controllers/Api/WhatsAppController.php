@@ -8,6 +8,7 @@ use App\Services\MetaGraphException;
 use App\Services\MetaGraphService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class WhatsAppController extends Controller
 {
@@ -30,12 +31,47 @@ class WhatsAppController extends Controller
             ], 500);
         }
 
+        $state = Str::uuid()->toString();
+        $redirectUri = route('meta.callback');
+        $scopes = [
+            'whatsapp_business_management',
+            'whatsapp_business_messaging',
+        ];
+
+        $request->session()->put('meta_oauth', [
+            'state' => $state,
+            'user_id' => $user->id,
+            'created_at' => now()->toIso8601String(),
+        ]);
+
+        $request->session()->forget('meta_oauth_result');
+
         return response()->json([
             'app_id' => $appId,
             'config_id' => $configId,
             'graph_version' => $graphVersion,
             'origin' => url('/'),
             'user_id' => $user->id,
+            'redirect_uri' => $redirectUri,
+            'state' => $state,
+            'auth_url' => sprintf(
+                'https://www.facebook.com/%s/dialog/oauth?%s',
+                $graphVersion,
+                http_build_query([
+                    'client_id' => $appId,
+                    'redirect_uri' => $redirectUri,
+                    'state' => $state,
+                    'scope' => implode(',', $scopes),
+                    'response_type' => 'code',
+                    'override_default_response_type' => 'true',
+                    'config_id' => $configId,
+                    'extras' => json_encode([
+                        'sessionInfoVersion' => '3',
+                        'version' => 'v4',
+                        'featureType' => 'whatsapp_business_app_onboarding',
+                    ], JSON_UNESCAPED_SLASHES),
+                ])
+            ),
         ]);
     }
 

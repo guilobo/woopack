@@ -169,6 +169,27 @@ it('requires authentication for whatsapp endpoints', function (): void {
         ->assertStatus(401);
 });
 
+it('provides whatsapp embedded signup configuration for an authenticated user', function (): void {
+    config([
+        'woopack.meta_app_id' => '1262833955826800',
+        'woopack.meta_wa_config_id' => '1833242710704317',
+        'woopack.meta_graph_version' => 'v25.0',
+    ]);
+
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/whatsapp/embed/config')
+        ->assertOk()
+        ->assertJsonPath('app_id', '1262833955826800')
+        ->assertJsonPath('config_id', '1833242710704317')
+        ->assertJsonPath('redirect_uri', route('meta.callback'));
+
+    expect($response->json('state'))->not->toBeEmpty();
+    expect($response->json('auth_url'))->toContain('facebook.com/v25.0/dialog/oauth');
+    expect($response->json('auth_url'))->toContain('config_id=1833242710704317');
+});
+
 it('returns a predictable error when whatsapp is not configured', function (): void {
     $user = User::factory()->create();
 

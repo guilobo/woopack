@@ -4,13 +4,6 @@ import { motion } from 'motion/react';
 import api from '../api';
 import type { AuthState } from '../App';
 
-declare global {
-  interface Window {
-    FB?: any;
-    fbAsyncInit?: () => void;
-  }
-}
-
 interface IntegrationSettingsProps {
   authState: AuthState;
   onUpdated: (payload: Partial<AuthState>) => void;
@@ -47,60 +40,9 @@ interface WhatsAppEmbeddedConfig {
   config_id: string;
   graph_version: string;
   origin: string;
-}
-
-function loadFacebookSdk(appId: string, graphVersion: string): Promise<void> {
-  if (typeof window === 'undefined') {
-    return Promise.reject(new Error('Facebook SDK is not available in this environment.'));
-  }
-
-  // If it's already loaded, (re)initialize to be safe.
-  if (window.FB) {
-    try {
-      window.FB.init({
-        appId,
-        cookie: true,
-        xfbml: false,
-        version: graphVersion,
-      });
-    } catch {
-      // Ignore init errors; FB SDK may already be initialized.
-    }
-
-    return Promise.resolve();
-  }
-
-  return new Promise((resolve, reject) => {
-    const existing = document.getElementById('facebook-jssdk');
-    if (existing) {
-      // The SDK script tag exists but window.FB isn't ready yet.
-      const wait = () => (window.FB ? resolve() : setTimeout(wait, 150));
-      wait();
-      return;
-    }
-
-    window.fbAsyncInit = () => {
-      try {
-        window.FB?.init({
-          appId,
-          cookie: true,
-          xfbml: false,
-          version: graphVersion,
-        });
-        resolve();
-      } catch (err) {
-        reject(err);
-      }
-    };
-
-    const script = document.createElement('script');
-    script.id = 'facebook-jssdk';
-    script.async = true;
-    script.defer = true;
-    script.src = 'https://connect.facebook.net/en_US/sdk.js';
-    script.onerror = () => reject(new Error('Falha ao carregar o SDK da Meta.'));
-    document.body.appendChild(script);
-  });
+  redirect_uri: string;
+  state: string;
+  auth_url: string;
 }
 
 export default function IntegrationSettings({ authState, onUpdated }: IntegrationSettingsProps) {
@@ -141,6 +83,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
   });
   const whatsAppAutoConnectingRef = useRef(false);
   const whatsAppConnectedRef = useRef(false);
+  const whatsAppStatusPollRef = useRef<number | null>(null);
 
   useEffect(() => {
     void Promise.all([loadConnection(), loadWhatsAppConnection()]);
@@ -149,6 +92,14 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
   useEffect(() => {
     whatsAppConnectedRef.current = Boolean(whatsAppInfo);
   }, [whatsAppInfo]);
+
+  useEffect(() => {
+    return () => {
+      if (whatsAppStatusPollRef.current) {
+        window.clearInterval(whatsAppStatusPollRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -399,7 +350,7 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
     setWhatsAppEmbeddedLoading(true);
     try {
       const response = await api.get<WhatsAppEmbeddedConfig>('/whatsapp/embed/config');
-      const { app_id, config_id, graph_version } = response.data;
+      const { auth_url } = response.data;
 
       // Reset any pending data from previous attempts.
       whatsAppPendingRef.current = {
@@ -411,46 +362,66 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
         phone_number_id: '',
       };
 
-      await loadFacebookSdk(app_id, graph_version);
+      await api.delete('/meta/connect/status');
 
-      if (!window.FB) {
-        throw new Error('SDK da Meta nao foi carregado.');
+      const popup = window.open(
+        auth_url,
+        'woopack-whatsapp-signup',
+        'width=620,height=820,menubar=no,toolbar=no,location=yes,status=no,resizable=yes,scrollbars=yes',
+      );
+
+      if (!popup) {
+        throw new Error('O navegador bloqueou a janela da Meta. Libere popups e tente novamente.');
       }
 
-      window.FB.login(
-        (fbResponse: any) => {
-          const code = String(fbResponse?.authResponse?.code ?? '').trim();
-          if (!code) {
-            const status = String(fbResponse?.status ?? '').trim();
-            if (status === 'not_authorized' || status === 'unknown') {
-              setWhatsAppError('Conexao cancelada ou nao autorizada. Verifique se popups estao liberados.');
-            } else {
-              setWhatsAppError('Nao recebemos o codigo de autorizacao da Meta. Tente novamente.');
-            }
+      popup.focus();
+
+      setWhatsAppSuccess('Popup aberto na Meta. Conclua o fluxo para finalizar a conexao.');
+
+      if (whatsAppStatusPollRef.current) {
+        window.clearInterval(whatsAppStatusPollRef.current);
+      }
+
+      whatsAppStatusPollRef.current = window.setInterval(async () => {
+        if (popup.closed) {
+          if (whatsAppStatusPollRef.current) {
+            window.clearInterval(whatsAppStatusPollRef.current);
+            whatsAppStatusPollRef.current = null;
+          }
+        }
+
+        try {
+          const statusResponse = await api.get<{ result: { status: string; code?: string | null; message?: string | null; error_message?: string | null } | null }>('/meta/connect/status');
+          const result = statusResponse.data.result;
+
+          if (!result) {
             return;
           }
 
-          setWhatsAppAuthCode(code);
-          whatsAppPendingRef.current.code = code;
+          if (whatsAppStatusPollRef.current) {
+            window.clearInterval(whatsAppStatusPollRef.current);
+            whatsAppStatusPollRef.current = null;
+          }
+
+          if (!popup.closed) {
+            popup.close();
+          }
+
+          if (result.status !== 'success' || !result.code) {
+            setWhatsAppError(result.error_message || result.message || 'Nao foi possivel concluir a autorizacao da Meta.');
+            return;
+          }
+
+          setWhatsAppAuthCode(result.code);
+          whatsAppPendingRef.current.code = result.code;
           whatsAppPendingRef.current.access_token = '';
           whatsAppPendingRef.current.expires_in = '';
           setWhatsAppSuccess('Codigo recebido da Meta. Finalizando conexao...');
-
           void tryAutoConnectWhatsApp();
-        },
-        {
-          config_id,
-          response_type: 'code',
-          override_default_response_type: true,
-          // Meta rejects `business_management` in this embedded signup flow; keep only WA scopes.
-          scope: 'whatsapp_business_management,whatsapp_business_messaging',
-          extras: {
-            sessionInfoVersion: 3,
-            version: 'v4',
-            featureType: 'whatsapp_business_app_onboarding',
-          },
+        } catch {
+          // Keep polling quietly while the popup is in progress.
         }
-      );
+      }, 1000);
     } catch (err: any) {
       setWhatsAppError(err.response?.data?.error || err.message || 'Nao foi possivel iniciar a conexao com a Meta.');
     } finally {
