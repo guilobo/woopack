@@ -171,7 +171,10 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
       for (const item of candidates) {
         if (!item || typeof item !== 'object') continue;
         if (item.type !== 'WA_EMBEDDED_SIGNUP') continue;
-        if (item.event !== 'FINISH') continue;
+        const isFinishEvent =
+          item.event === 'FINISH'
+          || item.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING';
+        if (!isFinishEvent) continue;
 
         const data = item.data ?? {};
         const businessId = typeof data.business_id === 'string' ? data.business_id : '';
@@ -416,38 +419,35 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
 
       window.FB.login(
         (fbResponse: any) => {
-          const accessToken = String(fbResponse?.authResponse?.accessToken ?? '').trim();
-          const expiresIn = fbResponse?.authResponse?.expiresIn;
           const code = String(fbResponse?.authResponse?.code ?? '').trim();
-          if (!code && !accessToken) {
+          if (!code) {
             const status = String(fbResponse?.status ?? '').trim();
             if (status === 'not_authorized' || status === 'unknown') {
               setWhatsAppError('Conexao cancelada ou nao autorizada. Verifique se popups estao liberados.');
             } else {
-              setWhatsAppError('Nao recebemos o token de autorizacao. Tente novamente.');
+              setWhatsAppError('Nao recebemos o codigo de autorizacao da Meta. Tente novamente.');
             }
             return;
           }
 
-          if (code) {
-            setWhatsAppAuthCode(code);
-            whatsAppPendingRef.current.code = code;
-          }
-
-          if (accessToken) {
-            whatsAppPendingRef.current.access_token = accessToken;
-            whatsAppPendingRef.current.expires_in = typeof expiresIn === 'number' ? String(expiresIn) : '';
-            setWhatsAppSuccess('Autorizacao recebida da Meta. Finalizando conexao...');
-          }
+          setWhatsAppAuthCode(code);
+          whatsAppPendingRef.current.code = code;
+          whatsAppPendingRef.current.access_token = '';
+          whatsAppPendingRef.current.expires_in = '';
+          setWhatsAppSuccess('Codigo recebido da Meta. Finalizando conexao...');
 
           void tryAutoConnectWhatsApp();
         },
         {
           config_id,
+          response_type: 'code',
+          override_default_response_type: true,
           // Meta rejects `business_management` in this embedded signup flow; keep only WA scopes.
           scope: 'whatsapp_business_management,whatsapp_business_messaging',
           extras: {
             sessionInfoVersion: 3,
+            version: 'v4',
+            featureType: 'whatsapp_business_app_onboarding',
           },
         }
       );
