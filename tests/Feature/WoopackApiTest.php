@@ -269,6 +269,38 @@ it('falls back to an alternate redirect uri when the first oauth exchange is rej
         ->assertJsonPath('connection.masked_access_token', '***LONG');
 });
 
+it('stores whatsapp connection directly from an embedded signup access token', function (): void {
+    config([
+        'woopack.meta_graph_version' => 'v25.0',
+    ]);
+
+    $user = User::factory()->create();
+
+    Http::fake([
+        'https://graph.facebook.com/v25.0/1092155150647314*' => Http::response([
+            'display_phone_number' => '+55 48 99670-4729',
+            'verified_name' => 'Indoor Tech',
+            'quality_rating' => 'GREEN',
+        ]),
+    ]);
+
+    $this->actingAs($user)
+        ->postJson('/api/whatsapp/connect', [
+            'access_token' => 'DIRECT_SHORT_TOKEN',
+            'expires_in' => 3600,
+            'business_id' => '2016512105057758',
+            'waba_id' => '26707985285502980',
+            'phone_number_id' => '1092155150647314',
+        ])
+        ->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('connection.phone_number_id', '1092155150647314')
+        ->assertJsonPath('connection.display_phone_number', '+55 48 99670-4729')
+        ->assertJsonPath('connection.masked_access_token', '***RT_TOKEN');
+
+    expect($user->refresh()->whatsAppConnection?->access_token)->toBe('DIRECT_SHORT_TOKEN');
+});
+
 it('refreshes phone number details when testing whatsapp connection', function (): void {
     config([
         'woopack.meta_graph_version' => 'v25.0',

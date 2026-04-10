@@ -133,6 +133,8 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
   const [whatsAppSuccess, setWhatsAppSuccess] = useState('');
   const whatsAppPendingRef = useRef({
     code: '',
+    access_token: '',
+    expires_in: '',
     business_id: '',
     waba_id: '',
     phone_number_id: '',
@@ -228,10 +230,11 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
 
     const pending = whatsAppPendingRef.current;
     const code = pending.code.trim();
+    const accessToken = pending.access_token.trim();
     const phoneId = pending.phone_number_id.trim();
 
-    // We only auto-connect once we have the code AND the phone_number_id.
-    if (!code || !phoneId) return;
+    // We only auto-connect once we have a credential and the phone_number_id.
+    if ((!code && !accessToken) || !phoneId) return;
 
     whatsAppAutoConnectingRef.current = true;
     setWhatsAppSaving(true);
@@ -243,7 +246,9 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
         success: boolean;
         connection: WhatsAppPayload['connection'];
       }>('/whatsapp/connect', {
-        authorization_code: code,
+        authorization_code: code || undefined,
+        access_token: accessToken || undefined,
+        expires_in: pending.expires_in ? Number.parseInt(pending.expires_in, 10) : undefined,
         business_id: pending.business_id || null,
         waba_id: pending.waba_id || null,
         phone_number_id: phoneId,
@@ -396,6 +401,8 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
       // Reset any pending data from previous attempts.
       whatsAppPendingRef.current = {
         code: '',
+        access_token: '',
+        expires_in: '',
         business_id: '',
         waba_id: '',
         phone_number_id: '',
@@ -407,27 +414,36 @@ export default function IntegrationSettings({ authState, onUpdated }: Integratio
         throw new Error('SDK da Meta nao foi carregado.');
       }
 
-        window.FB.login(
-          (fbResponse: any) => {
+      window.FB.login(
+        (fbResponse: any) => {
+          const accessToken = String(fbResponse?.authResponse?.accessToken ?? '').trim();
+          const expiresIn = fbResponse?.authResponse?.expiresIn;
           const code = String(fbResponse?.authResponse?.code ?? '').trim();
-          if (!code) {
+          if (!code && !accessToken) {
             const status = String(fbResponse?.status ?? '').trim();
             if (status === 'not_authorized' || status === 'unknown') {
               setWhatsAppError('Conexao cancelada ou nao autorizada. Verifique se popups estao liberados.');
             } else {
-              setWhatsAppError('Nao recebemos o codigo de autorizacao. Tente novamente.');
+              setWhatsAppError('Nao recebemos o token de autorizacao. Tente novamente.');
             }
             return;
           }
 
-          setWhatsAppAuthCode(code);
-          whatsAppPendingRef.current.code = code;
+          if (code) {
+            setWhatsAppAuthCode(code);
+            whatsAppPendingRef.current.code = code;
+          }
+
+          if (accessToken) {
+            whatsAppPendingRef.current.access_token = accessToken;
+            whatsAppPendingRef.current.expires_in = typeof expiresIn === 'number' ? String(expiresIn) : '';
+            setWhatsAppSuccess('Autorizacao recebida da Meta. Finalizando conexao...');
+          }
+
           void tryAutoConnectWhatsApp();
         },
         {
           config_id,
-          response_type: 'code',
-          override_default_response_type: true,
           // Meta rejects `business_management` in this embedded signup flow; keep only WA scopes.
           scope: 'whatsapp_business_management,whatsapp_business_messaging',
           extras: {
