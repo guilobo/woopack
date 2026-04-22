@@ -379,16 +379,28 @@ $remoteEnvValues['DB_DATABASE'] = [string]$config.mysql['dbname']
 $remoteEnvValues['DB_USERNAME'] = [string]$config.mysql['user']
 $remoteEnvValues['DB_PASSWORD'] = [string]$config.mysql['senha']
 
-$existingRemoteAppKey = Invoke-CheckedCapture -FilePath $script:PlinkPath -Arguments @(
-    '-batch',
-    '-ssh',
-    '-hostkey', $script:HostKey,
-    '-P', $script:Port,
-    '-l', $script:ServerUser,
-    '-pw', $script:ServerPassword,
-    $script:ServerHost,
-    "if [ -f '$remoteAppPath/.env' ]; then grep '^APP_KEY=' '$remoteAppPath/.env' | head -n 1; fi"
-) -FailureMessage 'Falha ao ler APP_KEY remoto'
+$existingRemoteAppKey = ''
+$previousErrorPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    $remoteKeyOutput = & $script:PlinkPath @(
+        '-batch',
+        '-ssh',
+        '-hostkey', $script:HostKey,
+        '-P', $script:Port,
+        '-l', $script:ServerUser,
+        '-pw', $script:ServerPassword,
+        $script:ServerHost,
+        "if [ -f '$remoteAppPath/.env' ]; then grep '^APP_KEY=' '$remoteAppPath/.env' | head -n 1; fi"
+    ) 2>$null
+
+    if ($LASTEXITCODE -eq 0) {
+        $existingRemoteAppKey = (($remoteKeyOutput | Select-Object -First 1) -as [string]).Trim()
+    }
+}
+finally {
+    $ErrorActionPreference = $previousErrorPreference
+}
 
 if (-not [string]::IsNullOrWhiteSpace($existingRemoteAppKey) -and $existingRemoteAppKey.StartsWith('APP_KEY=')) {
     $remoteEnvValues['APP_KEY'] = $existingRemoteAppKey.Substring('APP_KEY='.Length)
