@@ -379,6 +379,21 @@ $remoteEnvValues['DB_DATABASE'] = [string]$config.mysql['dbname']
 $remoteEnvValues['DB_USERNAME'] = [string]$config.mysql['user']
 $remoteEnvValues['DB_PASSWORD'] = [string]$config.mysql['senha']
 
+$existingRemoteAppKey = Invoke-CheckedCapture -FilePath $script:PlinkPath -Arguments @(
+    '-batch',
+    '-ssh',
+    '-hostkey', $script:HostKey,
+    '-P', $script:Port,
+    '-l', $script:ServerUser,
+    '-pw', $script:ServerPassword,
+    $script:ServerHost,
+    "if [ -f '$remoteAppPath/.env' ]; then grep '^APP_KEY=' '$remoteAppPath/.env' | head -n 1; fi"
+) -FailureMessage 'Falha ao ler APP_KEY remoto'
+
+if (-not [string]::IsNullOrWhiteSpace($existingRemoteAppKey) -and $existingRemoteAppKey.StartsWith('APP_KEY=')) {
+    $remoteEnvValues['APP_KEY'] = $existingRemoteAppKey.Substring('APP_KEY='.Length)
+}
+
 Write-DotEnvFile -Values $remoteEnvValues -Path $remoteEnvFile
 
 $remoteIndexTemplate = @'
@@ -427,7 +442,7 @@ Copy-ToRemote -LocalPath $remoteEnvFile -RemotePath "$remoteTempPath/dreamhost.e
 Write-Host 'Atualizando checkout remoto e publicando release...' -ForegroundColor Cyan
 $finalizeCommand = @"
 set -e
-git --git-dir='$remoteGitPath' fetch --force '$remoteTempPath/$appName.bundle' '${sourceRef}:refs/heads/$remoteBranch'
+git -c pack.threads=1 --git-dir='$remoteGitPath' fetch --force '$remoteTempPath/$appName.bundle' '${sourceRef}:refs/heads/$remoteBranch'
 mkdir -p '$remoteAppPath'
 git --work-tree='$remoteAppPath' --git-dir='$remoteGitPath' checkout -f '$remoteBranch'
 rm -rf '$remoteAppPath/vendor' '$remoteAppPath/public/build'
