@@ -17,11 +17,17 @@ function LineItemCard({
   item,
   isChild = false,
   groupLabel,
+  totalOverride,
 }: {
   item: LineItem;
   isChild?: boolean;
   groupLabel?: string;
+  totalOverride?: number;
 }) {
+  const formattedTotal = totalOverride !== undefined
+    ? totalOverride.toFixed(2)
+    : formatCurrency(item.total);
+
   return (
     <div
       className={[
@@ -59,10 +65,21 @@ function LineItemCard({
         </div>
       </div>
       <div className="text-right sm:min-w-[96px]">
-        <div className="font-bold text-slate-900">R$ {formatCurrency(item.total)}</div>
+        <div className="font-bold text-slate-900">R$ {formattedTotal}</div>
       </div>
     </div>
   );
+}
+
+function getGroupTotal(children: LineItem[]): number {
+  return children.reduce((sum, child) => {
+    const value = Number.parseFloat(child.total);
+    if (Number.isNaN(value)) {
+      return sum;
+    }
+
+    return sum + value;
+  }, 0);
 }
 
 export default function OrderLineItems({ lineItems }: { lineItems: LineItem[] }) {
@@ -88,6 +105,7 @@ export default function OrderLineItems({ lineItems }: { lineItems: LineItem[] })
         }
 
         const isOpen = Boolean(openGroups[block.key]);
+        const groupTotal = getGroupTotal(block.children);
 
         return (
           <div key={block.key} className="rounded-2xl border border-slate-100 bg-slate-50/40 p-2 sm:p-3">
@@ -106,7 +124,7 @@ export default function OrderLineItems({ lineItems }: { lineItems: LineItem[] })
                   {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                 </div>
               </div>
-              <LineItemCard item={block.parent} groupLabel="Grupo" />
+              <LineItemCard item={block.parent} groupLabel="Grupo" totalOverride={groupTotal} />
             </button>
 
             {isOpen && (
