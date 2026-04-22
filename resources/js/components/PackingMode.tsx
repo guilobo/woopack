@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Package, CheckSquare, ArrowLeft, CheckCircle
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../api';
+import OrderLineItems from './OrderLineItems';
 
 export default function PackingMode() {
   const [orders, setOrders] = useState<any[]>([]);
@@ -170,38 +171,7 @@ export default function PackingMode() {
                   <Package size={20} className="text-primary" />
                   <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Itens para Conferencia</h3>
                 </div>
-                <div className="grid gap-4">
-                  {currentOrder.line_items.map((item: any) => (
-                    <div key={item.id} className="flex flex-col gap-4 rounded-2xl border border-slate-100 bg-slate-50/50 p-4 transition-all hover:border-primary/20 sm:flex-row sm:items-center sm:justify-between sm:p-5 group">
-                      <div className="flex items-center gap-4 sm:gap-5">
-                        <div className="relative">
-                          <div className="w-16 h-16 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex items-center justify-center">
-                            {item.image?.src ? (
-                              <img
-                                src={item.image.src}
-                                alt={item.name}
-                                className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <Package size={24} className="text-slate-300" />
-                            )}
-                          </div>
-                          <div className="absolute -top-2 -right-2 w-7 h-7 bg-primary text-white rounded-full flex items-center justify-center text-xs font-bold shadow-md border-2 border-white">
-                            {item.quantity}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="font-bold text-slate-900 group-hover:text-primary transition-colors">{item.name}</div>
-                          <div className="text-xs text-slate-400 font-medium mt-0.5">SKU: {item.sku || 'N/A'}</div>
-                        </div>
-                      </div>
-                      <div className="text-right sm:min-w-[96px]">
-                        <div className="font-bold text-slate-900">R$ {parseFloat(item.total).toFixed(2)}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <OrderLineItems lineItems={currentOrder.line_items ?? []} />
               </div>
             </div>
           </div>
